@@ -101,7 +101,7 @@
   }
 
   async function ensureSetup() {
-    if (ids && ids.siteId && ids.listId && ids.v === 4) return ids;
+    if (ids && ids.siteId && ids.listId && ids.v === 5) return ids;
     const u = new URL(CFG.siteUrl);
     const site = await graph(`/sites/${u.hostname}:${u.pathname.replace(/\/$/, "")}`);
     const lists = await graph(`/sites/${site.id}/lists?$select=id,displayName&$top=200`);
@@ -130,7 +130,15 @@
       { name: "SleepQ", text: {} }
     ];
     for (const c of wanted) if (!have.has(c.name)) await graph(`/sites/${site.id}/lists/${list.id}/columns`, { method: "POST", body: JSON.stringify(c) });
-    ids = { siteId: site.id, listId: list.id, v: 4 };
+    // Push reminders: device subscriptions + app config (the public VAPID key)
+    const ensureList = async (name, columns) => {
+      let l = (lists.value || []).find(x => x.displayName === name);
+      if (!l) l = await graph(`/sites/${site.id}/lists`, { method: "POST", body: JSON.stringify({ displayName: name, list: { template: "genericList" }, columns }) });
+      return l.id;
+    };
+    const pushListId = await ensureList("Fuel Push", [{ name: "Subscription", text: { allowMultipleLines: true } }, { name: "Enabled", boolean: {} }]);
+    const configListId = await ensureList("Fuel Config", [{ name: "Value", text: { allowMultipleLines: true } }]);
+    ids = { siteId: site.id, listId: list.id, pushListId, configListId, v: 5 };
     store.set("fuel.ids", ids);
     return ids;
   }
@@ -961,6 +969,65 @@
     window.scrollTo(0, 0);
   }
 
+  // ---------- Push reminders ----------
+  const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const fromB64url = s => { const p = s.replace(/-/g, "+").replace(/_/g, "/"); const bin = atob(p + "===".slice((p.length + 3) % 4)); return Uint8Array.from(bin, c => c.charCodeAt(0)); };
+  async function getConfig(key) {
+    const { siteId, configListId } = await ensureSetup();
+    const res = await graph(`/sites/${siteId}/lists/${configListId}/items?$expand=fields($select=Title,Value)&$top=50`);
+    const it = (res.value || []).find(i => i.fields && i.fields.Title === key);
+    return it ? it.fields.Value : null;
+  }
+  async function setConfig(key, value) {
+    const { siteId, configListId } = await ensureSetup();
+    await graph(`/sites/${siteId}/lists/${configListId}/items`, { method: "POST", body: JSON.stringify({ fields: { Title: key, Value: value } }) });
+  }
+  function pushSupported() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+  async function pushStatus() {
+    if (!pushSupported()) return "unsupported";
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return sub ? "on" : Notification.permission === "denied" ? "denied" : "off";
+  }
+  async function renderPushStatus() {
+    const st = await pushStatus().catch(() => "unsupported");
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+    $("pushBtn").hidden = st === "on" || st === "unsupported";
+    $("pushOff").hidden = st !== "on";
+    $("pushState").textContent = st === "on" ? "Reminders are on for this phone." : st === "denied" ? "Notifications are blocked. Turn them on in iPhone Settings → Fuel." : st === "unsupported" ? (standalone ? "This device can't receive web notifications." : "Open Fuel from your home screen icon to turn on reminders.") : "Reminders are off on this phone.";
+  }
+  async function enablePush() {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { renderPushStatus(); return; }
+      let pub = await getConfig("vapidPublicKey");
+      let newPrivate = null;
+      if (!pub) {
+        const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+        pub = b64url(await crypto.subtle.exportKey("raw", kp.publicKey));
+        newPrivate = (await crypto.subtle.exportKey("jwk", kp.privateKey)).d;
+        await setConfig("vapidPublicKey", pub);
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64url(pub) });
+      const { siteId, pushListId } = await ensureSetup();
+      await graph(`/sites/${siteId}/lists/${pushListId}/items`, { method: "POST", body: JSON.stringify({ fields: { Title: (navigator.userAgent.match(/iPhone|iPad|Android|Mac|Windows/) || ["Device"])[0] + " " + todayKey(), Subscription: JSON.stringify(sub), Enabled: true } }) });
+      if (newPrivate) {
+        $("vapidKey").value = newPrivate; $("vapidBox").hidden = false;
+      } else showToast("Reminders on. Moss will nudge you.");
+      renderPushStatus();
+    } catch (e) { showToast("Couldn't turn on reminders: " + e.message, null, 6000); renderPushStatus(); }
+  }
+  async function disablePush() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+      showToast("Reminders off on this phone.");
+    } catch (e) {}
+    renderPushStatus();
+  }
+
   // ---------- Backdating ----------
   function setActive(key) {
     if (!key || key >= todayKey()) key = null;
@@ -1099,6 +1166,7 @@
     $("openSettings").onclick = () => {
       $("setKcal").value = targets.kcal; $("setPro").value = targets.protein;
       $("whoami").textContent = account ? `Signed in as ${account.username}` : "";
+      $("vapidBox").hidden = true; renderPushStatus();
       openSheet("settingsSheet");
     };
     $("setSave").onclick = () => {
@@ -1107,6 +1175,9 @@
       if (p >= 50 && p <= 300) targets.protein = p;
       store.set("fuel.targets", targets); closeSheets(); renderAll(); showToast("Targets saved.");
     };
+    $("pushBtn").onclick = enablePush;
+    $("pushOff").onclick = disablePush;
+    $("vapidCopy").onclick = async () => { try { await navigator.clipboard.writeText($("vapidKey").value); showToast("Key copied. Paste it into GitHub."); } catch (e) { $("vapidKey").select(); } };
     $("signOut").onclick = () => pca.logoutRedirect({ account });
 
     const pick = (id, slotFn) => $(id).addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) { const s = slotFn ? slotFn() : undefined; closeSheets(); onPhoto(f, s); } });
@@ -1214,6 +1285,7 @@
     else if (["b", "l", "d"].includes(h)) openMealSheet(h, h === "b" ? "b" : h === "l" ? LUNCH[today().getDay()] : DINNER[today().getDay()]);
     else if (h === "log") openSheet("logSheet");
     else if (h === "scan") openScanner(null);
+    else if (h === "reminders") $("openSettings").click();
     if (h) history.replaceState(null, "", "/");
     setStatus("Syncing…");
     refresh();

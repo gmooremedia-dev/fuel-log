@@ -337,4 +337,8 @@ label.icon-btn { position: relative; cursor: pointer; }
 .backdate { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 6; display: flex; gap: 10px; align-items: center; padding: 10px 16px; border-radius: 99px; background: var(--clay-dark); color: #fff; font-size: 13px; font-weight: 500; box-shadow: var(--shadow); white-space: nowrap; }
 .backdate b { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 
+.vapid { display: flex; flex-direction: column; gap: 8px; background: var(--amber-soft); border-radius: 14px; padding: 14px; }
+.vapid input { padding: 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.vapid code { font-size: 12px; }
+
 @media (prefers-reduced-motion: reduce) { *, .sheet { transition: none !important; animation: none !important; } }

@@ -381,9 +381,18 @@
 <!-- Settings -->
 <div class="sheet" id="settingsSheet" hidden role="dialog" aria-labelledby="setTitle">
   <div class="grab"></div>
-  <h2 id="setTitle">Targets</h2>
+  <h2 id="setTitle">Settings</h2>
   <div class="set-row"><label for="setKcal">Daily calories</label><input id="setKcal" type="number" inputmode="numeric" min="1000" max="4000" step="50"></div>
   <div class="set-row"><label for="setPro">Daily protein (g)</label><input id="setPro" type="number" inputmode="numeric" min="50" max="300" step="5"></div>
+  <h2 style="margin-top:6px">Reminders</h2>
+  <p class="muted small" style="margin:0" id="pushState"></p>
+  <button class="btn primary" id="pushBtn" hidden>Turn on reminders</button>
+  <button class="btn ghost sm" id="pushOff" hidden>Turn off on this phone</button>
+  <div class="vapid" id="vapidBox" hidden>
+    <p class="small" style="margin:0"><b>One-time setup.</b> Copy this key and add it in GitHub as a repository secret named <code>VAPID_PRIVATE_KEY</code>. It's only shown once and never leaves your phone otherwise.</p>
+    <input id="vapidKey" readonly>
+    <button class="btn ghost sm" id="vapidCopy">Copy key</button>
+  </div>
   <p class="muted small" style="margin:0" id="whoami"></p>
   <div class="two-btns">
     <button class="btn ghost" id="signOut">Sign out</button>

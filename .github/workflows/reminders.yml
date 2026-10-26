@@ -1,0 +1,43 @@
+name: Fuel reminders
+
+on:
+  schedule:
+    - cron: "0,30 5-21 * * *"   # every 30 minutes; the script works in London time
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "test = send a hello now"
+        default: "test"
+
+concurrency: reminders
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Restore today's sent list
+        uses: actions/cache/restore@v4
+        with:
+          path: notify/.state
+          key: reminders-state-${{ github.run_id }}
+          restore-keys: reminders-state-
+      - run: npm install --prefix notify --silent
+      - name: Send reminders
+        run: node notify/send.mjs
+        env:
+          MODE: ${{ github.event.inputs.mode || 'scheduled' }}
+          SITE_URL: https://shirestone581.sharepoint.com/sites/fuel
+          TENANT_ID: c4e0279c-d022-4e37-b9d7-6a4676219aeb
+          CLIENT_ID: ${{ vars.REMINDERS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.REMINDERS_CLIENT_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+      - name: Save today's sent list
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: notify/.state
+          key: reminders-state-${{ github.run_id }}
