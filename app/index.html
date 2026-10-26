@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fuel Log</title>
+<meta name="theme-color" content="#1f6b4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Fuel Log">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- Signed-out / setup screen -->
+<section id="gate" class="gate" hidden>
+  <div class="gate-inner">
+    <img src="/icons/icon-192.png" alt="" width="72" height="72">
+    <h1>Fuel Log</h1>
+    <p id="gateText">Sign in with your Shirestone account to start logging.</p>
+    <button id="signIn" class="primary big">Sign in</button>
+  </div>
+</section>
+
+<main id="app" hidden>
+  <header class="top">
+    <div>
+      <div class="date" id="date"></div>
+      <h1 id="headline">Three ticks today</h1>
+    </div>
+    <div class="streak"><b id="streak">0</b><span>day streak</span></div>
+  </header>
+
+  <div class="nudge" id="nudge" hidden>Monday weigh-in. Tap the weight card below.</div>
+
+  <section>
+    <h2>Today's food</h2>
+    <div class="meals" id="meals"></div>
+    <div class="done-msg" id="doneMsg" hidden>Day done. Streak's safe.</div>
+  </section>
+
+  <section>
+    <div class="h2row"><h2>Today's photos</h2><span class="muted small" id="photoCount"></span></div>
+    <div class="photos" id="photos"><p class="muted small" id="noPhotos">No photos yet. Tap Snap when you eat.</p></div>
+    <p class="day-total" id="dayTotal" hidden></p>
+  </section>
+
+  <section>
+    <h2>Gut this morning</h2>
+    <div class="chips3" id="gut">
+      <button class="chip" data-v="good" id="gut-good">Good</button>
+      <button class="chip" data-v="meh" id="gut-meh">Meh</button>
+      <button class="chip" data-v="rough" id="gut-rough">Rough</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Moved today</h2>
+    <button class="chip wide" id="move" aria-pressed="false">20 min workout done</button>
+  </section>
+
+  <section>
+    <h2>Weight</h2>
+    <button class="weight-card" id="weightCard">
+      <div>
+        <div class="w-big" id="wLast">Add weight</div>
+        <div class="muted small" id="wTrend">Tap to log</div>
+      </div>
+      <svg class="spark" id="spark" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </button>
+  </section>
+
+  <section>
+    <h2>Last 14 days</h2>
+    <div class="strip" id="strip"></div>
+    <div class="legend">
+      <span><i class="lg full"></i>All 3 meals</span>
+      <span><i class="lg part"></i>Some</span>
+      <span><i class="lg rough"></i>Rough gut</span>
+    </div>
+  </section>
+
+  <p class="status" id="status">Loading…</p>
+  <div class="fab-space"></div>
+</main>
+
+<!-- Snap button -->
+<label class="fab" id="fab" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+  <span>Snap food</span>
+  <input id="camera" type="file" accept="image/*" capture="environment">
+</label>
+
+<!-- Toast after a photo -->
+<div class="toast" id="toast" hidden>
+  <div id="toastText">Saved</div>
+  <div class="toast-slots" id="toastSlots" hidden>
+    <button data-slot="Breakfast">Breakfast</button>
+    <button data-slot="Lunch">Lunch</button>
+    <button data-slot="Dinner">Dinner</button>
+    <button data-slot="Snack">Snack</button>
+  </div>
+</div>
+
+<!-- Weight sheet -->
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-labelledby="sheetTitle">
+  <h2 id="sheetTitle">Log weight</h2>
+  <div class="w-entry"><span id="wValue">84.0</span><small>kg</small></div>
+  <div class="steppers">
+    <button data-step="-1">−1</button>
+    <button data-step="-0.1">−0.1</button>
+    <button data-step="0.1">+0.1</button>
+    <button data-step="1">+1</button>
+  </div>
+  <p class="muted small">Same time each week, first thing, after the loo.</p>
+  <div class="sheet-actions">
+    <button class="ghost" id="wCancel">Cancel</button>
+    <button class="primary" id="wSave">Save</button>
+  </div>
+</div>
+
+<script src="/config.js"></script>
+<script src="/msal-browser.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
