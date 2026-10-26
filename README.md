@@ -43,7 +43,7 @@ You need Node.js (LTS) installed.
 2. Unzip this folder, open a terminal in it, and run:
 
 ```
-npx @azure/static-web-apps-cli deploy ./app --deployment-token YOUR_TOKEN --env production
+npx @azure/static-web-apps-cli deploy ./app --api-location ./api --api-language node --api-version 20 --deployment-token YOUR_TOKEN --env production
 ```
 
 3. Open the site on your iPhone in Safari → Share → **Add to Home Screen**.
