@@ -1,4 +1,4 @@
-name: Deploy Fuel Log
+name: Deploy Fuel
 
 on:
   push:

@@ -1,4 +1,4 @@
-// Fuel reminders: runs every 30 minutes on GitHub Actions. Reads today's row from the Fuel Log list
+// Fuel reminders: runs every 30 minutes on GitHub Actions. Reads today's row from the Fuel list
 // (read-only, app-only Graph) and sends a push to George's phone only when something is still missing.
 import webpush from "web-push";
 import fs from "node:fs";
@@ -53,7 +53,7 @@ webpush.setVapidDetails("mailto:george@shirestone.uk", vapidPublic, VAPID_PRIVAT
 const subs = (await items("Fuel Push", "Title,Subscription,Enabled")).filter(s => s.Enabled !== false && s.Subscription);
 if (!subs.length) { console.log("No devices subscribed."); process.exit(0); }
 
-const days = await items("Fuel Log", "Title,Breakfast,Lunch,Dinner,Gut,Moved,WeightKg,Mood,Calories,ProteinG,FoodsJson");
+const days = await items(listId("Fuel") ? "Fuel" : "Fuel Log", "Title,Breakfast,Lunch,Dinner,Gut,Moved,WeightKg,Mood,Calories,ProteinG,FoodsJson");
 const t = days.find(d => d.Title === date) || {};
 const foods = (() => { try { return JSON.parse(t.FoodsJson || "[]"); } catch { return []; } })();
 

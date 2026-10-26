@@ -1,19 +1,19 @@
 # Fuel
 
-George's meal, gut, workout and weight tracker. A phone-first web app (PWA) hosted on Azure Static Web Apps, signing in with Shirestone Entra ID and saving everything to SharePoint.
+George's ADHD-friendly day companion: food, gut, body, check-ins and reminders, with Moss. A phone-first web app (PWA) hosted on Azure Static Web Apps, signing in with Shirestone Entra ID and saving everything to SharePoint.
 
 ## What's already set up
 
 | Piece | Where | Value |
 |---|---|---|
-| App registration | Entra → App registrations → Fuel Log | Client ID `c11feb51-df62-491d-917c-fa03c228e29c` |
+| App registration | Entra → App registrations → Fuel | Client ID `c11feb51-df62-491d-917c-fa03c228e29c` |
 | Tenant | Shirestone | `c4e0279c-d022-4e37-b9d7-6a4676219aeb` |
 | Permissions | Microsoft Graph, delegated | `User.Read`, `Sites.Manage.All` (no admin consent needed) |
 | Redirect URIs (SPA) | | `https://fuel.shirestone.uk`, `https://blue-water-08e10e110.4.azurestaticapps.net` |
 | SharePoint site | | `https://shirestone581.sharepoint.com/sites/fuel` |
 | Static Web App | Azure → rg-fuel → swa-fuel (Free plan) | `https://blue-water-08e10e110.4.azurestaticapps.net` |
 
-The app creates its own **Fuel Log** list and **Food Photos** folder on the site the first time you sign in.
+The app creates its own **Fuel** list and **Food Photos** folder on the site the first time you sign in.
 
 ## Deploys (GitHub)
 
@@ -33,7 +33,7 @@ Set these in swa-fuel → Settings → Environment variables (Production):
 | `ALLOWED_USERS` | `george@shirestone.uk` |
 | `FOOD_MODEL` | optional, defaults to `claude-sonnet-5-5` |
 
-Estimates are saved to the day's row in the Fuel Log list (`FoodsJson`, `Calories`, `ProteinG`).
+Estimates are saved to the day's row in the Fuel list (`FoodsJson`, `Calories`, `ProteinG`).
 
 ## Manual deploy (fallback, from your PC)
 
@@ -58,7 +58,7 @@ Redeploy the same way whenever the app changes.
 
 ## Where the data lives
 
-- **Fuel Log list:** one row per day. Title = date (YYYY-MM-DD), Breakfast / Lunch / Dinner / Moved (yes/no), Gut (good / meh / rough), WeightKg.
+- **Fuel list:** one row per day. Title = date (YYYY-MM-DD), Breakfast / Lunch / Dinner / Moved (yes/no), Gut (good / meh / rough), WeightKg.
 - **Documents → Food Photos → YYYY-MM-DD:** photos named like `1312-Lunch.jpg`, shrunk to 1600px before upload.
 
 ## Changing the meal plan

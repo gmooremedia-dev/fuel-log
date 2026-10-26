@@ -1,9 +1,10 @@
-/* Fuel Log — single-page app. Sign-in via MSAL (Entra ID), data via Microsoft Graph into a SharePoint site. */
+/* Fuel — single-page app. Sign-in via MSAL (Entra ID), data via Microsoft Graph into a SharePoint site. */
 (() => {
   "use strict";
   const CFG = window.FUEL_CONFIG || {};
   const SCOPES = ["User.Read", "Sites.Manage.All"];
-  const LIST_NAME = "Fuel Log";
+  const LIST_NAME = "Fuel";
+  const OLD_LIST_NAMES = ["Fuel Log"];
   const PHOTO_ROOT = "Food Photos";
   const PROGRESS_ROOT = "Progress Photos";
   const POSES = ["front", "side", "back"];
@@ -105,7 +106,7 @@
     const u = new URL(CFG.siteUrl);
     const site = await graph(`/sites/${u.hostname}:${u.pathname.replace(/\/$/, "")}`);
     const lists = await graph(`/sites/${site.id}/lists?$select=id,displayName&$top=200`);
-    let list = (lists.value || []).find(l => l.displayName === LIST_NAME);
+    let list = (lists.value || []).find(l => l.displayName === LIST_NAME) || (lists.value || []).find(l => OLD_LIST_NAMES.includes(l.displayName));
     if (!list) {
       list = await graph(`/sites/${site.id}/lists`, {
         method: "POST",
