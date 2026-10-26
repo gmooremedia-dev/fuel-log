@@ -38,6 +38,9 @@
   const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const today = () => new Date();
   const todayKey = () => isoDate(today());
+  let activeKey = null;                       // null = today; "YYYY-MM-DD" when backdating
+  const dayKey = () => activeKey || todayKey();
+  const isToday = () => dayKey() === todayKey();
   const nowTime = (d = new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const fmt = n => Math.round(n).toLocaleString("en-GB");
   const blank = () => ({ b: false, l: false, d: false, gut: null, mood: null, energy: null, sleep: null, move: false, weight: null, waist: null, foods: [] });
@@ -182,15 +185,15 @@
   }
 
   // ---------- State ----------
-  function change(patch, key = todayKey()) {
+  function change(patch, key = dayKey()) {
     days[key] = Object.assign(getDay(key), patch);
     pending.add(key); save(); renderAll(); scheduleFlush();
   }
-  const foodFor = name => (getDay(todayKey()).foods || []).find(f => f.file === name);
-  const foodForField = field => (getDay(todayKey()).foods || []).find(f => f.key === field);
+  const foodFor = name => (getDay(dayKey()).foods || []).find(f => f.file === name);
+  const foodForField = field => (getDay(dayKey()).foods || []).find(f => f.key === field);
   const keyFor = (slot, time) => SLOT_FIELD[slot] || `snack-${(time || "").replace(":", "")}-${Date.now() % 100000}`;
   function upsertFood(rec, extraPatch = {}) {
-    const foods = (getDay(todayKey()).foods || []).filter(f => f.key !== rec.key && !(rec.file && f.file === rec.file));
+    const foods = (getDay(dayKey()).foods || []).filter(f => f.key !== rec.key && !(rec.file && f.file === rec.file));
     foods.push(rec);
     const field = SLOT_FIELD[rec.slot];
     change({ ...(field ? { [field]: true } : {}), ...extraPatch, foods });
@@ -257,11 +260,11 @@
   async function repairFoods() {
     if (repairing) return; repairing = true;
     try {
-      const t = getDay(todayKey());
+      const t = getDay(dayKey());
       for (const f of (t.foods || []).filter(x => x.source === "text" && !x.calories && !x.pendingAI)) {
         const named = slotFromText(f.name);
         if (named && named !== f.slot) {
-          const foods = (getDay(todayKey()).foods || []).filter(x => x.key !== f.key);
+          const foods = (getDay(dayKey()).foods || []).filter(x => x.key !== f.key);
           change({ foods });
           await logText(SLOT_FIELD[named] || null, f.name, { slot: named, time: f.time, quiet: true });
         } else {
@@ -276,23 +279,23 @@
       calories: m.kcal, protein_g: m.protein, flags: [], items: [], note: "" });
   }
   function setPortion(key, p) {
-    const foods = (getDay(todayKey()).foods || []).map(f => {
+    const foods = (getDay(dayKey()).foods || []).map(f => {
       if (f.key !== key) return f;
       const base = f.base || { kcal: f.calories, protein: f.protein_g };
       return { ...f, base, portion: p, calories: Math.round(base.kcal * p), protein_g: Math.round(base.protein * p) };
     });
     change({ foods });
   }
-  const foodsInSlot = (slot, r = getDay(todayKey())) => (r.foods || []).filter(f => (f.slot || "Snack") === slot);
+  const foodsInSlot = (slot, r = getDay(dayKey())) => (r.foods || []).filter(f => (f.slot || "Snack") === slot);
   function addFood(rec) {   // adds alongside anything already logged for that meal
     const field = SLOT_FIELD[rec.slot];
     const existing = foodsInSlot(rec.slot);
     rec.key = field ? (existing.length ? `${field}+${Date.now() % 1000000}` : field) : keyFor("Snack", rec.time);
-    const foods = (getDay(todayKey()).foods || []).concat(rec);
+    const foods = (getDay(dayKey()).foods || []).concat(rec);
     change({ ...(field ? { [field]: true } : {}), foods });
   }
   function removeFood(key) {
-    const all = getDay(todayKey()).foods || [];
+    const all = getDay(dayKey()).foods || [];
     const gone = all.find(f => f.key === key);
     const foods = all.filter(f => f.key !== key);
     const patch = { foods };
@@ -330,7 +333,7 @@
   async function loadPhotos() {
     try {
       const { siteId } = await ensureSetup();
-      const res = await graph(`/sites/${siteId}/drive/root:/${encPath(PHOTO_ROOT + "/" + todayKey())}:/children?$expand=thumbnails&$select=id,name`);
+      const res = await graph(`/sites/${siteId}/drive/root:/${encPath(PHOTO_ROOT + "/" + dayKey())}:/children?$expand=thumbnails&$select=id,name`);
       const remote = (res.value || []).map(f => {
         const m = f.name.match(/(Breakfast|Lunch|Dinner|Snack)/);
         const rec = foodFor(f.name);
@@ -346,20 +349,20 @@
   async function onPhoto(file, slotOverride) {
     if (!file) return;
     const now = new Date();
-    const taken = file.lastModified && isoDate(new Date(file.lastModified)) === todayKey() ? new Date(file.lastModified) : now;
+    const taken = file.lastModified && isoDate(new Date(file.lastModified)) === dayKey() ? new Date(file.lastModified) : now;
     const slot = slotOverride || slotForNow(taken);
     const time = nowTime(taken);
     const entry = { id: null, name: `${time.replace(":", "")}-${slot}.jpg`, thumb: URL.createObjectURL(file), local: true, slot, time };
     entry.key = keyFor(slot, time);
     todaysPhotos.push(entry); lastUpload = entry;
     const field = SLOT_FIELD[slot];
-    if (field && !getDay(todayKey())[field]) change({ [field]: true }); else renderAll();
+    if (field && !getDay(dayKey())[field]) change({ [field]: true }); else renderAll();
     showToast(slotOverride ? `Added to ${slot.toLowerCase()}. Working out calories…` : `Logged as ${slot.toLowerCase()}. Wrong? Tap to move it.`, slotOverride ? null : slot);
     let blob;
     try { blob = await shrink(file); } catch (e) { showToast(e.message); return; }
     try {
       const { siteId } = await ensureSetup();
-      const res = await graph(`/sites/${siteId}/drive/root:/${encPath(PHOTO_ROOT + "/" + todayKey() + "/" + entry.name)}:/content?@microsoft.graph.conflictBehavior=rename`, {
+      const res = await graph(`/sites/${siteId}/drive/root:/${encPath(PHOTO_ROOT + "/" + dayKey() + "/" + entry.name)}:/content?@microsoft.graph.conflictBehavior=rename`, {
         method: "PUT", body: blob, headers: { "Content-Type": "image/jpeg" }
       });
       entry.id = res.id; entry.name = res.name;
@@ -381,7 +384,7 @@
     const oldName = entry.name, oldKey = entry.key;
     entry.slot = newSlot; entry.name = entry.name.replace(/(Breakfast|Lunch|Dinner|Snack)/, newSlot);
     entry.key = keyFor(newSlot, entry.time);
-    let foods = getDay(todayKey()).foods || [];
+    let foods = getDay(dayKey()).foods || [];
     const rec = foods.find(f => f.key === oldKey || f.file === oldName);
     foods = foods.filter(f => f !== rec && (!newField || f.key !== newField));
     if (rec) foods.push({ ...rec, key: entry.key, slot: newSlot, file: entry.name });
@@ -427,7 +430,7 @@
     try {
       const blob = await shrink(file, 2000);
       const { siteId } = await ensureSetup();
-      await graph(`/sites/${siteId}/drive/root:/${encPath(PROGRESS_ROOT + "/" + todayKey() + "-" + pose + ".jpg")}:/content`, { method: "PUT", body: blob, headers: { "Content-Type": "image/jpeg" } });
+      await graph(`/sites/${siteId}/drive/root:/${encPath(PROGRESS_ROOT + "/" + dayKey() + "-" + pose + ".jpg")}:/content`, { method: "PUT", body: blob, headers: { "Content-Type": "image/jpeg" } });
       showToast(`${pose[0].toUpperCase() + pose.slice(1)} photo saved.`);
       await loadProgress();
     } catch (e) { showToast("Photo didn't save. Try again."); }
@@ -548,9 +551,12 @@
 
   // ---------- Render: Today ----------
   function renderToday() {
-    const now = today(), t = getDay(todayKey()), tot = totals(t);
+    const now = today(), t = getDay(dayKey()), tot = totals(t);
     const hour = now.getHours();
-    $("date").textContent = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+    const ad = new Date(dayKey() + "T12:00:00");
+    $("date").textContent = isToday() ? "Today, " + ad.toLocaleDateString("en-GB", { day: "numeric", month: "long" }) : ad.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+    document.querySelector(".daypick").classList.toggle("past", !isToday());
+    $("dayNext").disabled = isToday();
     $("headline").textContent = "Food";
 
     // ring
@@ -568,7 +574,7 @@
 
     // meals
     const wrap = $("meals"); wrap.textContent = "";
-    const rows = [["b", "b"], ["l", LUNCH[now.getDay()]], ["d", DINNER[now.getDay()]]];
+    const rows = [["b", "b"], ["l", LUNCH[ad.getDay()]], ["d", DINNER[ad.getDay()]]];
     rows.forEach(([field, mk]) => {
       const m = MEALS[mk], recs = foodsInSlot(m.slot, t);
       const rec = recs.length ? { name: recs.map(x => x.name).join(", "), calories: recs.reduce((a, x) => a + (x.calories || 0), 0), protein_g: recs.reduce((a, x) => a + (x.protein_g || 0), 0) } : null;
@@ -594,7 +600,7 @@
     const sb = document.createElement("button");
     sb.className = "meal" + (snacks.length ? " done" : "");
     sb.innerHTML = `<span class="m-ic">${snacks.length ? ICONS.tick : ICONS.s}</span><span class="m-txt"><span class="m-slot">Snacks & extras</span><span class="m-name"></span></span><span class="m-kcal"></span>`;
-    sb.querySelector(".m-name").textContent = snacks.length ? snacks.map(s => s.name).join(", ") : "Anything else today";
+    sb.querySelector(".m-name").textContent = snacks.length ? snacks.map(s => s.name).join(", ") : (isToday() ? "Anything else today" : "Anything else");
     sb.querySelector(".m-kcal").innerHTML = snacks.length ? `<b>${fmt(sk)}</b><span>kcal</span>` : '<span class="m-add">Add</span>';
     sb.onclick = () => openMealSheet(null);
     wrap.appendChild(sb);
@@ -769,7 +775,7 @@
     } else $("storyCard").hidden = true;
     const u = upNext();
     $("upTitle").textContent = u.title; $("upText").textContent = u.text; $("upBtn").textContent = u.btn;
-    $("upBtn").onclick = u.go;
+    $("upBtn").onclick = () => { if (!isToday()) setActive(null); u.go(); };
     const w = winsList(), ul = $("wins"); ul.textContent = "";
     $("winCount").textContent = w.length ? `${w.length} so far` : "";
     if (!w.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "Nothing yet, and that's fine. One tiny thing gets this going."; ul.appendChild(li); }
@@ -782,7 +788,7 @@
 
   // ---------- Check-in ----------
   function openCheckin() {
-    const t = getDay(todayKey());
+    const t = getDay(dayKey());
     document.querySelectorAll("#checkinSheet .ci-opts").forEach(g => {
       const f = g.dataset.field;
       g.querySelectorAll("button").forEach(b => b.classList.toggle("on", String(t[f]) === b.dataset.v));
@@ -926,7 +932,7 @@
       box.appendChild(el);
     });
     const last = progress.length ? progress[progress.length - 1].date : null;
-    const since = last ? Math.floor((new Date(todayKey()) - new Date(last)) / 86400000) : null;
+    const since = last ? Math.floor((new Date(dayKey()) - new Date(last)) / 86400000) : null;
     $("progressHint").textContent = !last ? "Front, side and back. Same spot, same light, once a week." : since >= 7 ? `Last set ${since} days ago, so this week's are due.` : `Last set ${since === 0 ? "today" : since + " days ago"}. Next in ${7 - since} days.`;
     $("compareBtn").disabled = new Set(progress.map(p => p.date)).size < 2;
     $("revealBtn").textContent = revealed ? "Hide photos" : "Show photos";
@@ -954,6 +960,23 @@
     renderAll();
     window.scrollTo(0, 0);
   }
+
+  // ---------- Backdating ----------
+  function setActive(key) {
+    if (!key || key >= todayKey()) key = null;
+    activeKey = key;
+    const past = !!key;
+    const label = past ? new Date(key + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }) : "Today";
+    $("backdate").hidden = !past;
+    $("backdateText").textContent = `Logging for ${label}`;
+    $("logDayText").textContent = label;
+    document.querySelector(".log-day").classList.toggle("past", past);
+    $("dayInput").value = dayKey(); $("logDayInput").value = dayKey();
+    $("dayInput").max = todayKey(); $("logDayInput").max = todayKey();
+    todaysPhotos = [];
+    renderAll(); loadPhotos();
+  }
+  const shiftDay = n => { const d = new Date(dayKey() + "T12:00:00"); d.setDate(d.getDate() + n); setActive(isoDate(d)); };
 
   // ---------- Sheets ----------
   const SHEETS = ["checkinSheet", "logSheet", "mealSheet", "gutSheet", "moveSheet", "numSheet", "compareSheet", "settingsSheet", "productSheet"];
@@ -1017,7 +1040,7 @@
   let numKind = "weight", numVal = 84;
   function openNum(kind) {
     numKind = kind;
-    const t = getDay(todayKey()), s = series(kind);
+    const t = getDay(dayKey()), s = series(kind);
     numVal = typeof t[kind] === "number" ? t[kind] : s.length ? s[s.length - 1][1] : kind === "weight" ? 84 : 90;
     $("numTitle").textContent = kind === "weight" ? "Log weight" : "Log waist";
     $("numUnit").textContent = kind === "weight" ? "kg" : "cm";
@@ -1033,7 +1056,7 @@
     openSheet("numSheet");
   }
   function openGut() {
-    const g = getDay(todayKey()).gut;
+    const g = getDay(dayKey()).gut;
     document.querySelectorAll("#gutSheet .chip").forEach(c => c.classList.toggle("on", c.dataset.v === g));
     openSheet("gutSheet");
   }
@@ -1066,6 +1089,11 @@
   function wire() {
     document.querySelectorAll(".tab[data-view]").forEach(t => t.onclick = () => show(t.dataset.view));
     $("plusBtn").onclick = () => openSheet("logSheet");
+    $("dayPrev").onclick = () => shiftDay(-1);
+    $("dayNext").onclick = () => shiftDay(1);
+    $("dayInput").addEventListener("change", e => setActive(e.target.value));
+    $("logDayInput").addEventListener("change", e => setActive(e.target.value));
+    $("backdate").onclick = () => { setActive(null); showToast("Back to today."); };
     $("scrim").onclick = closeSheets;
     document.querySelectorAll("[data-close]").forEach(b => b.onclick = closeSheets);
     $("openSettings").onclick = () => {
@@ -1118,17 +1146,17 @@
       if (rec) { removeFood(rec.key); showToast(`${FIELD_SLOT[sheetField] || "Item"} removed.`); }
     };
     document.querySelectorAll("#gutSheet .chip").forEach(c => c.onclick = () => {
-      const v = getDay(todayKey()).gut === c.dataset.v ? null : c.dataset.v;
+      const v = getDay(dayKey()).gut === c.dataset.v ? null : c.dataset.v;
       change({ gut: v }); closeSheets(); if (v) showToast(v === "good" ? "Nice. Logged." : "Logged. I'll look for patterns.");
     });
     document.querySelectorAll("#checkinSheet .ci-opts").forEach(g => g.querySelectorAll("button").forEach(b => b.onclick = () => {
-      const f = g.dataset.field, cur = getDay(todayKey())[f];
+      const f = g.dataset.field, cur = getDay(dayKey())[f];
       const v = f === "mood" ? Number(b.dataset.v) : b.dataset.v;
       change({ [f]: String(cur) === b.dataset.v ? null : v });
       g.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b && String(cur) !== b.dataset.v));
     }));
     $("ciDone").onclick = () => {
-      const t = getDay(todayKey()); closeSheets();
+      const t = getDay(dayKey()); closeSheets();
       showToast(t.gut === "rough" || t.mood <= 2 || t.energy === "low" ? "Logged. Gentle day then. One small thing at a time." : "Checked in. Moss is awake now.");
     };
     $("moveDone").onclick = () => { change({ move: true }); closeSheets(); showToast("Workout logged. Good work."); };
@@ -1174,7 +1202,7 @@
     try { acct = await initAuth(); } catch (e) { console.error(e); }
     if (!acct) { $("gate").hidden = false; $("signIn").onclick = signIn; return; }
     $("app").hidden = false;
-    wire(); show("home"); renderBody();
+    wire(); setActive(null); show("home"); renderBody();
     // Deep links from notifications: #gut, #weight, #waist, #move, #snap, #body, #trends, #b, #l, #d
     const h = location.hash.replace("#", "");
     if (h === "trends" || h === "body" || h === "home") show(h);

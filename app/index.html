@@ -30,6 +30,7 @@
 </section>
 
 <div id="app" hidden>
+  <button class="backdate" id="backdate" hidden><span id="backdateText">Logging for Saturday</span><b>Back to today</b></button>
 
   <!-- ===== HOME ===== -->
   <main class="view" id="view-home">
@@ -75,7 +76,11 @@
   <main class="view" id="view-today" hidden>
     <header class="top">
       <div>
-        <div class="eyebrow" id="date"></div>
+        <div class="daynav">
+          <button id="dayPrev" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <label class="daypick"><span id="date"></span><input id="dayInput" type="date" aria-label="Pick a day to log"></label>
+          <button id="dayNext" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
         <h1 id="headline">Food</h1>
       </div>
       <div class="hdr-btns">
@@ -239,7 +244,7 @@
 <!-- Log menu -->
 <div class="sheet" id="logSheet" hidden role="dialog" aria-labelledby="logTitle">
   <div class="grab"></div>
-  <h2 id="logTitle">Log something</h2>
+  <div class="log-head"><h2 id="logTitle">Log something</h2><label class="log-day"><span id="logDayText">Today</span><input id="logDayInput" type="date" aria-label="Log for which day"></label></div>
   <div class="logmenu">
     <label class="lm"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>Snap food<input id="lmCamera" type="file" accept="image/*" capture="environment"></label>
     <label class="lm"><span class="lm-ic"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg></span>Upload photo<input id="lmGallery" type="file" accept="image/*"></label>
