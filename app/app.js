@@ -40,7 +40,7 @@
   const todayKey = () => isoDate(today());
   const nowTime = (d = new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const fmt = n => Math.round(n).toLocaleString("en-GB");
-  const blank = () => ({ b: false, l: false, d: false, gut: null, move: false, weight: null, waist: null, foods: [] });
+  const blank = () => ({ b: false, l: false, d: false, gut: null, mood: null, energy: null, sleep: null, move: false, weight: null, waist: null, foods: [] });
   const totals = r => (r.foods || []).reduce((a, f) => ({ kcal: a.kcal + (f.calories || 0), protein: a.protein + (f.protein_g || 0) }), { kcal: 0, protein: 0 });
   const store = {
     get(k, f) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; } catch (e) { return f; } },
@@ -98,7 +98,7 @@
   }
 
   async function ensureSetup() {
-    if (ids && ids.siteId && ids.listId && ids.v === 3) return ids;
+    if (ids && ids.siteId && ids.listId && ids.v === 4) return ids;
     const u = new URL(CFG.siteUrl);
     const site = await graph(`/sites/${u.hostname}:${u.pathname.replace(/\/$/, "")}`);
     const lists = await graph(`/sites/${site.id}/lists?$select=id,displayName&$top=200`);
@@ -121,17 +121,20 @@
       { name: "FoodsJson", text: { allowMultipleLines: true, linesForEditing: 6 } },
       { name: "Calories", number: { decimalPlaces: "none" } },
       { name: "ProteinG", number: { decimalPlaces: "none" } },
-      { name: "WaistCm", number: { decimalPlaces: "one" } }
+      { name: "WaistCm", number: { decimalPlaces: "one" } },
+      { name: "Mood", number: { decimalPlaces: "none" } },
+      { name: "Energy", text: {} },
+      { name: "SleepQ", text: {} }
     ];
     for (const c of wanted) if (!have.has(c.name)) await graph(`/sites/${site.id}/lists/${list.id}/columns`, { method: "POST", body: JSON.stringify(c) });
-    ids = { siteId: site.id, listId: list.id, v: 3 };
+    ids = { siteId: site.id, listId: list.id, v: 4 };
     store.set("fuel.ids", ids);
     return ids;
   }
 
   async function pull() {
     const { siteId, listId } = await ensureSetup();
-    let url = `/sites/${siteId}/lists/${listId}/items?$expand=fields($select=Title,Breakfast,Lunch,Dinner,Gut,Moved,WeightKg,WaistCm,FoodsJson)&$top=500`;
+    let url = `/sites/${siteId}/lists/${listId}/items?$expand=fields($select=Title,Breakfast,Lunch,Dinner,Gut,Moved,WeightKg,WaistCm,FoodsJson,Mood,Energy,SleepQ)&$top=500`;
     while (url) {
       const page = await graph(url);
       for (const it of page.value || []) {
@@ -142,6 +145,7 @@
         try { foods = f.FoodsJson ? JSON.parse(f.FoodsJson) : []; } catch (e) {}
         days[f.Title] = {
           b: !!f.Breakfast, l: !!f.Lunch, d: !!f.Dinner, gut: f.Gut || null, move: !!f.Moved,
+          mood: typeof f.Mood === "number" ? f.Mood : null, energy: f.Energy || null, sleep: f.SleepQ || null,
           weight: typeof f.WeightKg === "number" ? f.WeightKg : null, waist: typeof f.WaistCm === "number" ? f.WaistCm : null, foods
         };
       }
@@ -160,7 +164,9 @@
         for (const key of [...pending]) {
           const r = getDay(key), t = totals(r);
           const fields = { Title: key, Breakfast: r.b, Lunch: r.l, Dinner: r.d, Gut: r.gut || "", Moved: r.move,
-            FoodsJson: JSON.stringify(r.foods || []), Calories: t.kcal, ProteinG: t.protein };
+            FoodsJson: JSON.stringify(r.foods || []), Calories: t.kcal, ProteinG: t.protein,
+            Energy: r.energy || "", SleepQ: r.sleep || "" };
+          if (typeof r.mood === "number") fields.Mood = r.mood;
           if (typeof r.weight === "number") fields.WeightKg = r.weight;
           if (typeof r.waist === "number") fields.WaistCm = r.waist;
           if (itemIds[key]) await graph(`/sites/${siteId}/lists/${listId}/items/${itemIds[key]}/fields`, { method: "PATCH", body: JSON.stringify(fields) });
@@ -515,7 +521,7 @@
     const now = today(), t = getDay(todayKey()), tot = totals(t);
     const hour = now.getHours();
     $("date").textContent = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
-    $("headline").textContent = hour < 12 ? "Morning, George" : hour < 18 ? "Afternoon, George" : "Evening, George";
+    $("headline").textContent = "Food";
 
     // ring
     const left = targets.kcal - tot.kcal;
@@ -589,6 +595,169 @@
     const ws = series("weight");
     $("pillWeight").className = "pill" + (typeof t.weight === "number" ? " set" : "");
     $("weightText").textContent = typeof t.weight === "number" ? `${t.weight.toFixed(1)} kg` : now.getDay() === 1 ? "Weigh-in day" : ws.length ? `Weight · ${ws[ws.length - 1][1].toFixed(1)}` : "Weight";
+  }
+
+  // ---------- Moss, sunlight and the garden ----------
+  const SUN_TARGET = 10;
+  function sunFor(r) {
+    if (!r) return 0;
+    let s = 0;
+    ["gut", "mood", "energy", "sleep"].forEach(k => { if (r[k] != null && r[k] !== "") s += 0.5; });
+    ["b", "l", "d"].forEach(k => { if (r[k]) s += 2; });
+    if (r.move) s += 2;
+    if (typeof r.weight === "number" || typeof r.waist === "number") s += 1;
+    if ((r.foods || []).some(f => f.slot === "Snack")) s += 0.5;
+    return s;
+  }
+  const fullDays = () => Object.keys(days).filter(k => k < todayKey() && sunFor(days[k]) >= SUN_TARGET).length + (sunFor(getDay(todayKey())) >= SUN_TARGET ? 1 : 0);
+  const GARDEN = [
+    [1, "pebbles", "a little pile of pebbles"], [2, "mushroom", "a red mushroom"], [3, "daisy", "a daisy"], [5, "fern", "a curly fern"],
+    [7, "lantern", "a tiny lantern"], [10, "butterfly", "a butterfly friend"], [14, "path", "a stepping-stone path"], [18, "tulips", "a row of tulips"],
+    [21, "bench", "a little bench"], [25, "pond", "a pond"], [30, "tree", "a young tree"], [40, "bird", "a robin who visits"]
+  ];
+  const STORIES = [
+    "Moss followed a beetle to the bottom of the garden and back. It took all night. Moss says it was worth it.",
+    "Moss climbed the fence to look at the stars, counted to forty-two, then fell asleep in a flowerpot.",
+    "Moss found a dewdrop the size of a pea and spent the night admiring it.",
+    "Moss had tea with a snail. The snail was late, but very polite.",
+    "Moss tried to catch the moon in a puddle. Nearly managed it.",
+    "Moss went looking for the source of a mysterious hum. It was a bee. A very sleepy bee.",
+    "Moss rearranged the pebbles three times and decided the first way was best.",
+    "Moss practised a little dance under the lantern. No one saw. Probably.",
+    "Moss followed a trail of crumbs and found a ladybird having a picnic.",
+    "Moss listened to the rain on a leaf and wrote a very short song about it."
+  ];
+  const hash = str => { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+  function mossMood() {
+    const h = today().getHours();
+    const t = getDay(todayKey());
+    if (sunFor(t) >= SUN_TARGET) return "glow";
+    if (h < 9 && !t.mood) return "sleepy";
+    if (h >= 21) return "cosy";
+    return "happy";
+  }
+  function mossSays() {
+    const t = getDay(todayKey()), h = today().getHours(), sun = sunFor(t);
+    const pickOne = arr => arr[hash(todayKey() + h) % arr.length];
+    if (sun >= SUN_TARGET) return pickOne(["Full of sunshine. I'm going exploring tonight!", "Look at us. Proper glowing today.", "That's a full sun day. Garden's going to love this."]);
+    if (t.gut === "rough") return "Rough gut today? Let's go gentle. Small meals, plenty of water.";
+    if (h < 10 && t.mood == null) return pickOne(["Morning. How are we feeling?", "Sun's coming up. Quick check-in?", "Morning! Tap me a check-in and I'll wake up properly."]);
+    if (h < 12) return pickOne(["One small thing at a time. That's the whole trick.", "Smoothie first, world second.", "You're doing fine. Honestly."]);
+    if (h < 17) return pickOne(["Afternoon. Drink some water, I'll wait.", "Halfway there. What's one tiny thing next?", "Lunch logged? I'm nosy about lunch."]);
+    if (h < 21) return pickOne(["Evening. Dinner, then feet up.", "Nearly done for the day. Proud of you.", "Twenty minutes of moving and I get a new plant. Just saying."]);
+    return pickOne(["Cosy time. Phone down soon?", "Big day. Rest up.", "Night night. I'll tell you what I find."]);
+  }
+  function mossSvg(mood, items) {
+    const has = id => items.includes(id);
+    const eyes = mood === "sleepy" ? '<path d="M178 168q8 6 16 0M226 168q8 6 16 0" stroke="#1c2a20" stroke-width="3.5" fill="none" stroke-linecap="round"/>'
+      : mood === "cosy" ? '<path d="M178 170q8-6 16 0M226 170q8-6 16 0" stroke="#1c2a20" stroke-width="3.5" fill="none" stroke-linecap="round"/>'
+      : mood === "glow" ? '<path d="M178 170q8-9 16 0M226 170q8-9 16 0" stroke="#1c2a20" stroke-width="3.5" fill="none" stroke-linecap="round"/>'
+      : '<ellipse cx="186" cy="167" rx="7" ry="8.5" fill="#1c2a20"/><ellipse cx="234" cy="167" rx="7" ry="8.5" fill="#1c2a20"/><circle cx="188.5" cy="164" r="2.4" fill="#fff"/><circle cx="236.5" cy="164" r="2.4" fill="#fff"/>';
+    const mouth = mood === "sleepy" ? '<ellipse cx="210" cy="188" rx="4" ry="3" fill="#1c2a20"/>' : '<path d="M202 184q8 8 16 0" stroke="#1c2a20" stroke-width="3" fill="none" stroke-linecap="round"/>';
+    const glow = mood === "glow" ? '<circle cx="210" cy="170" r="92" fill="var(--sun)" opacity=".18"/>' : "";
+    const zzz = mood === "sleepy" ? '<text x="268" y="118" font-family="var(--display)" font-weight="700" font-size="18" fill="var(--muted)">z</text><text x="282" y="100" font-family="var(--display)" font-weight="700" font-size="13" fill="var(--muted)">z</text>' : "";
+    const it = (id, svg) => has(id) ? `<g class="g-item">${svg}</g>` : "";
+    return `<svg viewBox="0 0 420 262" role="img" aria-label="Moss, sitting in its pot${items.length ? " in a garden with " + items.length + " things" : ""}">
+      <ellipse cx="210" cy="252" rx="200" ry="14" fill="var(--track)"/>
+      ${it("pond", '<ellipse cx="350" cy="240" rx="52" ry="12" fill="#8cc4d8" opacity=".85"/><ellipse cx="338" cy="237" rx="14" ry="3" fill="#fff" opacity=".6"/>')}
+      ${it("tree", '<rect x="34" y="120" width="12" height="122" rx="5" fill="var(--soil)"/><circle cx="40" cy="104" r="34" fill="var(--moss-dark)"/><circle cx="62" cy="124" r="22" fill="var(--moss)"/><circle cx="20" cy="124" r="20" fill="var(--moss)"/>')}
+      ${it("bird", '<g transform="translate(46 70)"><ellipse cx="0" cy="0" rx="11" ry="9" fill="#7a5a43"/><circle cx="8" cy="-6" r="6" fill="#7a5a43"/><ellipse cx="2" cy="3" rx="6" ry="5" fill="#d9663b"/><path d="M14 -6l5 1.5-5 1.5z" fill="var(--sun)"/><circle cx="9" cy="-7" r="1.3" fill="#1c2a20"/></g>')}
+      ${it("path", '<ellipse cx="280" cy="250" rx="13" ry="5" fill="var(--line)"/><ellipse cx="306" cy="246" rx="11" ry="4" fill="var(--line)"/><ellipse cx="254" cy="252" rx="11" ry="4" fill="var(--line)"/>')}
+      ${it("bench", '<rect x="300" y="196" width="70" height="8" rx="3" fill="var(--soil)"/><rect x="300" y="180" width="70" height="7" rx="3" fill="var(--soil)"/><rect x="306" y="204" width="5" height="36" fill="var(--soil)"/><rect x="359" y="204" width="5" height="36" fill="var(--soil)"/>')}
+      ${it("tulips", '<g fill="var(--moss-dark)"><rect x="96" y="214" width="3" height="30"/><rect x="110" y="208" width="3" height="36"/><rect x="124" y="216" width="3" height="28"/></g><path d="M91 214q6-14 12 0q-6 6-12 0z" fill="#e0607e"/><path d="M105 208q6-14 12 0q-6 6-12 0z" fill="var(--sun)"/><path d="M119 216q6-14 12 0q-6 6-12 0z" fill="#e0607e"/>')}
+      ${it("fern", '<path d="M330 244q-2-40 22-58M330 244q10-30 38-34M330 244q-16-28-40-30" stroke="var(--moss)" stroke-width="5" fill="none" stroke-linecap="round"/>')}
+      ${it("lantern", '<rect x="96" y="150" width="3" height="94" fill="var(--soil)"/><rect x="88" y="138" width="19" height="22" rx="4" fill="var(--sun)" opacity=".9"/><circle cx="97" cy="149" r="16" fill="var(--sun)" opacity=".18"/>')}
+      ${it("mushroom", '<rect x="148" y="226" width="9" height="18" rx="4" fill="#f3e9da"/><path d="M137 230q15-24 31 0z" fill="#d9483b"/><circle cx="146" cy="223" r="2.4" fill="#fff"/><circle cx="156" cy="221" r="2" fill="#fff"/>')}
+      ${it("daisy", '<rect x="282" y="214" width="3" height="30" fill="var(--moss-dark)"/><g fill="#fff"><circle cx="283" cy="206" r="5"/><circle cx="291" cy="212" r="5"/><circle cx="275" cy="212" r="5"/><circle cx="279" cy="220" r="5"/><circle cx="287" cy="220" r="5"/></g><circle cx="283" cy="213" r="4" fill="var(--sun)"/>')}
+      ${it("pebbles", '<ellipse cx="128" cy="246" rx="9" ry="5" fill="#a9b0a8"/><ellipse cx="141" cy="248" rx="6" ry="4" fill="#c2c7c0"/>')}
+      ${it("butterfly", '<g transform="translate(330 120)"><path d="M0 0q-16-16-18 2q2 12 18-2z" fill="#e0607e"/><path d="M0 0q16-16 18 2q-2 12-18-2z" fill="#f08aa2"/><rect x="-1.5" y="-6" width="3" height="14" rx="1.5" fill="#1c2a20"/></g>')}
+      ${glow}
+      <g class="moss-body">
+        <path d="M150 196h120l-12 52a8 8 0 0 1-8 6h-80a8 8 0 0 1-8-6z" fill="var(--clay)"/>
+        <rect x="142" y="188" width="136" height="18" rx="6" fill="var(--clay-dark)"/>
+        <path d="M210 92c46 0 66 34 66 66 0 22-12 34-24 38h-84c-12-4-24-16-24-38 0-32 20-66 66-66z" fill="var(--moss)"/>
+        <circle cx="174" cy="126" r="6" fill="var(--moss-dark)" opacity=".6"/><circle cx="250" cy="138" r="5" fill="var(--moss-dark)" opacity=".6"/><circle cx="232" cy="112" r="4" fill="var(--moss-dark)" opacity=".5"/>
+        <path d="M210 94c-2-14 2-26 12-32" stroke="var(--moss-dark)" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <path d="M220 64c10-8 24-6 30 2c-10 8-24 8-30-2z" fill="var(--moss-dark)"/>
+        <path d="M212 76c-10-10-24-8-28 0c8 8 22 8 28 0z" fill="var(--moss)"/>
+        ${eyes}
+        <ellipse cx="170" cy="182" rx="9" ry="5" fill="#e98b8b" opacity=".45"/><ellipse cx="250" cy="182" rx="9" ry="5" fill="#e98b8b" opacity=".45"/>
+        ${mouth}
+      </g>
+      ${zzz}
+    </svg>`;
+  }
+  function upNext() {
+    const t = getDay(todayKey()), now = today(), h = now.getHours() + now.getMinutes() / 60;
+    const din = DINNER[now.getDay()], lun = LUNCH[now.getDay()];
+    if (t.mood == null && h < 12) return { title: "Morning check-in", text: "Gut, mood, energy, sleep. Four taps, all optional.", btn: "Check in", go: openCheckin };
+    if (now.getDay() === 1 && t.weight == null && h < 12) return { title: "Weigh-in day", text: "Scales first thing, after the loo. Waist too if you've got the tape.", btn: "Log weight", go: () => openNum("weight") };
+    if (!t.b && h < 11.5) return { title: "Breakfast", text: `${MEALS.b.name}, or log whatever you had.`, btn: "Log breakfast", go: () => openMealSheet("b", "b") };
+    if (!t.l && h >= 11.5 && h < 16) return { title: "Lunch", text: `Plan says ${MEALS[lun].name.toLowerCase()}. Snap it, scan it or tap it.`, btn: "Log lunch", go: () => openMealSheet("l", lun) };
+    if (!t.move && h >= 16.5 && h < 20.5) return { title: "20-minute workout", text: "Press-ups, squats, lunges, band rows, plank. Moss gets 2 sunlight.", btn: "I've done it", go: () => openSheet("moveSheet") };
+    if (!t.d && h >= 17.5 && h < 22) return { title: "Dinner", text: `Plan says ${din === "dAny" ? "your pick" : MEALS[din].name.toLowerCase()}.`, btn: "Log dinner", go: () => openMealSheet("d", din) };
+    if (t.mood == null) return { title: "Quick check-in", text: "Missed it this morning? It still counts.", btn: "Check in", go: openCheckin };
+    if (h >= 20.5) return { title: "That's the day", text: "Have a look at your wins, then phone down.", btn: "See trends", go: () => show("trends") };
+    return { title: "All caught up", text: "Nothing needs doing right now. Moss is sunbathing.", btn: "Log something", go: () => openSheet("logSheet") };
+  }
+  function winsList() {
+    const t = getDay(todayKey()), out = [];
+    if (t.mood != null || t.gut) out.push(["Morning check-in", 2]);
+    ["b", "l", "d"].forEach(f => { if (t[f]) { const recs = foodsInSlot(FIELD_SLOT[f], t); out.push([`${FIELD_SLOT[f]}: ${recs.length ? recs.map(r => r.name).join(", ") : "logged"}`, 2]); } });
+    foodsInSlot("Snack", t).forEach(r => out.push([`Snack: ${r.name}`, 0]));
+    if (t.move) out.push(["20-minute workout", 2]);
+    if (typeof t.weight === "number") out.push([`Weighed in: ${t.weight.toFixed(1)} kg`, 1]);
+    if (typeof t.waist === "number") out.push([`Waist: ${t.waist.toFixed(1)} cm`, 0]);
+    return out;
+  }
+  function renderHome() {
+    const now = today(), t = getDay(todayKey()), h = now.getHours();
+    $("homeDate").textContent = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+    $("homeHello").textContent = h < 12 ? "Morning, George" : h < 18 ? "Afternoon, George" : "Evening, George";
+    const sun = sunFor(t);
+    $("sunCount").textContent = Number.isInteger(sun) ? sun : sun.toFixed(1);
+    $("sunFill").style.width = Math.min(100, sun / SUN_TARGET * 100) + "%";
+    $("sunNote").textContent = sun >= SUN_TARGET ? "Full sun! Moss goes exploring tonight." : `${(SUN_TARGET - sun).toFixed(sun % 1 ? 1 : 0)} more sunlight and Moss goes exploring tonight.`;
+    const full = fullDays();
+    const unlocked = GARDEN.filter(g => full >= g[0]).map(g => g[1]);
+    $("garden").innerHTML = mossSvg(mossMood(), unlocked);
+    $("mossSays").textContent = mossSays();
+    const nextG = GARDEN.find(g => full < g[0]);
+    $("gardenCount").textContent = `${unlocked.length} of ${GARDEN.length} found`;
+    $("gardenNext").textContent = nextG ? `${nextG[0] - full} more full-sun day${nextG[0] - full === 1 ? "" : "s"} until Moss finds ${nextG[2]}. Missed days never take anything away.` : "Moss has found everything. The garden's complete.";
+    // overnight story (morning only)
+    const y = new Date(now); y.setDate(y.getDate() - 1);
+    const yk = isoDate(y), ysun = sunFor(days[yk]);
+    if (h < 14 && days[yk]) {
+      $("storyCard").hidden = false;
+      if (ysun >= SUN_TARGET) {
+        const found = GARDEN.find(g => g[0] === Object.keys(days).filter(k => k <= yk && sunFor(days[k]) >= SUN_TARGET).length);
+        $("storyText").textContent = STORIES[hash(yk) % STORIES.length] + (found ? ` And look: Moss brought back ${found[2]}!` : "");
+      } else {
+        $("storyText").textContent = "Moss stayed in last night, had a cup of tea and an early one. Fresh start today.";
+      }
+    } else $("storyCard").hidden = true;
+    const u = upNext();
+    $("upTitle").textContent = u.title; $("upText").textContent = u.text; $("upBtn").textContent = u.btn;
+    $("upBtn").onclick = u.go;
+    const w = winsList(), ul = $("wins"); ul.textContent = "";
+    $("winCount").textContent = w.length ? `${w.length} so far` : "";
+    if (!w.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "Nothing yet, and that's fine. One tiny thing gets this going."; ul.appendChild(li); }
+    w.forEach(([txt, s]) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="w-ic">${ICONS.tick}</span><span class="w-t"></span>${s ? `<span class="w-sun">+${s} sun</span>` : ""}`;
+      li.querySelector(".w-t").textContent = txt; ul.appendChild(li);
+    });
+  }
+
+  // ---------- Check-in ----------
+  function openCheckin() {
+    const t = getDay(todayKey());
+    document.querySelectorAll("#checkinSheet .ci-opts").forEach(g => {
+      const f = g.dataset.field;
+      g.querySelectorAll("button").forEach(b => b.classList.toggle("on", String(t[f]) === b.dataset.v));
+    });
+    openSheet("checkinSheet");
   }
 
   // ---------- Charts ----------
@@ -667,11 +836,29 @@
     $("gutKpi").textContent = gl.length ? `${gl.filter(v => v === "good").length}/${gl.length} good` : "–";
     $("gutInsight").textContent = gutInsight();
 
+    // mood
+    const msn = $("moodStrip"); msn.textContent = ""; msn.style.setProperty("--n", Math.min(range, 15));
+    const moods = gutKeys.map(k => getDay(k).mood);
+    gutKeys.forEach((k, i) => { const v = moods[i]; const c = document.createElement("div"); c.className = "ms" + (v ? " m" + v : ""); c.title = `${shortDate(k)}: ${v ? "mood " + v + "/5" : "not logged"}`; msn.appendChild(c); });
+    const ml = moods.filter(v => v);
+    $("moodKpi").textContent = ml.length ? `${(ml.reduce((a, b) => a + b, 0) / ml.length).toFixed(1)}/5 avg` : "–";
+    $("moodInsight").textContent = moodInsight();
     // consistency
     const cs = $("consStrip"); cs.textContent = ""; cs.style.setProperty("--n", Math.min(range, 15));
     let full = 0;
     gutKeys.forEach(k => { const r = getDay(k); const n = ["b", "l", "d"].filter(f => r[f]).length; if (n === 3) full++; const c = document.createElement("div"); c.className = "cs" + (n ? " p" + n : ""); c.title = `${shortDate(k)}: ${n}/3 meals`; cs.appendChild(c); });
     $("consKpi").textContent = `${full}/${gutKeys.length} days`;
+  }
+  function moodInsight() {
+    const ks = Object.keys(days).filter(k => days[k].mood);
+    if (ks.length < 5) return "Check in most mornings and I'll show you what lifts your mood: sleep, workouts, eating well.";
+    const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+    const prevMove = ks.map(k => { const p = new Date(k); p.setDate(p.getDate() - 1); return [days[k].mood, !!(days[isoDate(p)] || {}).move]; });
+    const a = avg(prevMove.filter(x => x[1]).map(x => x[0])), b = avg(prevMove.filter(x => !x[1]).map(x => x[0]));
+    const sl = avg(ks.filter(k => days[k].sleep === "great").map(k => days[k].mood)), sp = avg(ks.filter(k => days[k].sleep === "poor").map(k => days[k].mood));
+    if (sl != null && sp != null && sl - sp >= 0.8) return `Mood averages ${sl.toFixed(1)} after great sleep and ${sp.toFixed(1)} after poor sleep. Bedtime is doing a lot of work.`;
+    if (a != null && b != null && a - b >= 0.5) return `Mood is ${(a - b).toFixed(1)} points higher the day after a workout. Worth protecting those 20 minutes.`;
+    return "No strong pattern yet. Keep checking in and it'll show up.";
   }
   function gutInsight() {
     const all = Object.keys(days).sort();
@@ -723,22 +910,23 @@
     $("waistDelta").textContent = wa.length >= 2 ? `${wa[wa.length - 1][1] - wa[0][1] <= 0 ? "−" : "+"}${Math.abs(wa[wa.length - 1][1] - wa[0][1]).toFixed(1)} cm` : "–";
   }
 
-  let current = "today";
+  let current = "home";
   function renderAll() {
     renderToday();
+    if (current === "home") renderHome();
     if (current === "trends") renderTrends();
     if (current === "body") renderBody();
   }
   function show(view) {
     current = view;
-    ["today", "trends", "body"].forEach(v => { $("view-" + v).hidden = v !== view; });
+    ["home", "today", "trends", "body"].forEach(v => { $("view-" + v).hidden = v !== view; });
     document.querySelectorAll(".tab[data-view]").forEach(t => { if (t.dataset.view === view) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current"); });
     renderAll();
     window.scrollTo(0, 0);
   }
 
   // ---------- Sheets ----------
-  const SHEETS = ["logSheet", "mealSheet", "gutSheet", "moveSheet", "numSheet", "compareSheet", "settingsSheet", "productSheet"];
+  const SHEETS = ["checkinSheet", "logSheet", "mealSheet", "gutSheet", "moveSheet", "numSheet", "compareSheet", "settingsSheet", "productSheet"];
   function openSheet(id) { SHEETS.forEach(s => { $(s).hidden = s !== id; }); $("scrim").hidden = false; }
   function closeSheets() { SHEETS.forEach(s => { $(s).hidden = true; }); $("scrim").hidden = true; }
 
@@ -859,12 +1047,13 @@
     $("signOut").onclick = () => pca.logoutRedirect({ account });
 
     const pick = (id, slotFn) => $(id).addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) { const s = slotFn ? slotFn() : undefined; closeSheets(); onPhoto(f, s); } });
-    pick("camera"); pick("lmCamera"); pick("lmGallery");
+    pick("camera"); pick("camera2"); pick("lmCamera"); pick("lmGallery");
     const sheetSlot = () => sheetField ? FIELD_SLOT[sheetField] : "Snack";
     pick("mealCam", sheetSlot); pick("mealLib", sheetSlot);
 
     document.querySelectorAll("#logSheet [data-act]").forEach(b => b.onclick = () => {
       const a = b.dataset.act;
+      if (a === "checkin") openCheckin();
       if (a === "type") openMealSheet(null);
       if (a === "scan") openScanner(null);
       if (a === "gut") openGut();
@@ -897,6 +1086,16 @@
       const v = getDay(todayKey()).gut === c.dataset.v ? null : c.dataset.v;
       change({ gut: v }); closeSheets(); if (v) showToast(v === "good" ? "Nice. Logged." : "Logged. I'll look for patterns.");
     });
+    document.querySelectorAll("#checkinSheet .ci-opts").forEach(g => g.querySelectorAll("button").forEach(b => b.onclick = () => {
+      const f = g.dataset.field, cur = getDay(todayKey())[f];
+      const v = f === "mood" ? Number(b.dataset.v) : b.dataset.v;
+      change({ [f]: String(cur) === b.dataset.v ? null : v });
+      g.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b && String(cur) !== b.dataset.v));
+    }));
+    $("ciDone").onclick = () => {
+      const t = getDay(todayKey()); closeSheets();
+      showToast(t.gut === "rough" || t.mood <= 2 || t.energy === "low" ? "Logged. Gentle day then. One small thing at a time." : "Checked in. Moss is awake now.");
+    };
     $("moveDone").onclick = () => { change({ move: true }); closeSheets(); showToast("Workout logged. Good work."); };
     $("moveUndo").onclick = () => { change({ move: false }); closeSheets(); };
     $("numSave").onclick = () => { change({ [numKind]: numVal }); closeSheets(); showToast(`Saved ${numVal.toFixed(1)} ${numKind === "weight" ? "kg" : "cm"}.`); };
@@ -940,10 +1139,12 @@
     try { acct = await initAuth(); } catch (e) { console.error(e); }
     if (!acct) { $("gate").hidden = false; $("signIn").onclick = signIn; return; }
     $("app").hidden = false;
-    wire(); renderAll(); renderBody();
+    wire(); show("home"); renderBody();
     // Deep links from notifications: #gut, #weight, #waist, #move, #snap, #body, #trends, #b, #l, #d
     const h = location.hash.replace("#", "");
-    if (h === "trends" || h === "body") show(h);
+    if (h === "trends" || h === "body" || h === "home") show(h);
+    else if (h === "food") show("today");
+    else if (h === "checkin") openCheckin();
     else if (h === "gut") openGut();
     else if (h === "move") openSheet("moveSheet");
     else if (h === "weight" || h === "waist") openNum(h);

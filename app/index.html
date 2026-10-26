@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Fuel Log</title>
+<title>Fuel</title>
 <meta name="theme-color" content="#f2f4f1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0e1411" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Fuel Log">
+<meta name="apple-mobile-web-app-title" content="Fuel">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="icon" href="/icons/icon-192.png">
@@ -23,24 +23,67 @@
 <section id="gate" class="gate" hidden>
   <div class="gate-inner">
     <img src="/icons/icon-192.png" alt="" width="72" height="72">
-    <h1>Fuel Log</h1>
-    <p id="gateText">Sign in with your Shirestone account to start logging.</p>
+    <h1>Fuel</h1>
+    <p id="gateText">Your day, looked after. Sign in with your Shirestone account.</p>
     <button id="signIn" class="btn primary big">Sign in</button>
   </div>
 </section>
 
 <div id="app" hidden>
 
+  <!-- ===== HOME ===== -->
+  <main class="view" id="view-home">
+    <header class="top">
+      <div>
+        <div class="eyebrow" id="homeDate"></div>
+        <h1 id="homeHello">Hello</h1>
+      </div>
+      <div class="sun-badge" id="sunBadge" aria-label="Sunlight today"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg><span id="sunCount">0</span></div>
+    </header>
+
+    <section class="garden-card">
+      <div class="bubble" id="mossSays">Morning.</div>
+      <div class="garden" id="garden" aria-label="Moss in the garden"></div>
+      <div class="sunbar"><div class="sunbar-fill" id="sunFill"></div></div>
+      <p class="muted small sun-note" id="sunNote"></p>
+    </section>
+
+    <section class="story" id="storyCard" hidden>
+      <div class="eyebrow">While you slept</div>
+      <p id="storyText"></p>
+    </section>
+
+    <section class="upnext" id="upNext">
+      <div class="eyebrow">Up next</div>
+      <h2 id="upTitle">Morning check-in</h2>
+      <p class="muted" id="upText"></p>
+      <button class="btn primary big" id="upBtn">Start</button>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Today's wins</h2><span class="muted small" id="winCount"></span></div>
+      <ul class="wins" id="wins"></ul>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Garden</h2><span class="muted small" id="gardenCount"></span></div>
+      <p class="muted small" id="gardenNext" style="margin:0"></p>
+    </section>
+  </main>
+
   <!-- ===== TODAY ===== -->
-  <main class="view" id="view-today">
+  <main class="view" id="view-today" hidden>
     <header class="top">
       <div>
         <div class="eyebrow" id="date"></div>
-        <h1 id="headline">Today</h1>
+        <h1 id="headline">Food</h1>
       </div>
+      <div class="hdr-btns">
+      <label class="icon-btn" aria-label="Snap food"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><input id="camera2" type="file" accept="image/*" capture="environment"></label>
       <button class="icon-btn" id="openSettings" aria-label="Targets and settings">
         <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
       </button>
+      </div>
     </header>
 
     <section class="hero" aria-label="Today's calories">
@@ -117,6 +160,12 @@
     </section>
 
     <section class="card">
+      <div class="card-head"><h2>Mood</h2><span class="kpi" id="moodKpi">–</span></div>
+      <div class="moodstrip" id="moodStrip"></div>
+      <p class="insight" id="moodInsight"></p>
+    </section>
+
+    <section class="card">
       <div class="card-head"><h2>Consistency</h2><span class="kpi" id="consKpi">–</span></div>
       <div class="cons" id="consStrip"></div>
       <p class="muted small note">Each square is a day: full means all three meals logged.</p>
@@ -155,23 +204,23 @@
 
   <!-- Tab bar -->
   <nav class="tabbar" aria-label="Sections">
-    <button class="tab" data-view="today" aria-current="page">
-      <svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z"/></svg><span>Today</span>
+    <button class="tab" data-view="home" aria-current="page">
+      <svg viewBox="0 0 24 24"><path d="M12 20c-4 0-7-2.5-7-6.5C5 9 8.5 6 12 4c3.5 2 7 5 7 9.5 0 4-3 6.5-7 6.5z"/><path d="M12 20v-7"/></svg><span>Home</span>
     </button>
-    <button class="tab" data-view="trends">
-      <svg viewBox="0 0 24 24"><path d="M4 19h16M7 16v-5M12 16V7M17 16v-8"/></svg><span>Trends</span>
+    <button class="tab" data-view="today">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 7.5V12l3 2"/></svg><span>Food</span>
     </button>
     <button class="plus" id="plusBtn" aria-label="Log something">
       <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     </button>
+    <button class="tab" data-view="trends">
+      <svg viewBox="0 0 24 24"><path d="M4 19h16M7 16v-5M12 16V7M17 16v-8"/></svg><span>Trends</span>
+    </button>
     <button class="tab" data-view="body">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="2.5"/><path d="M7 10.5h10M12 10.5V15m0 0l-3 5m3-5l3 5"/></svg><span>Body</span>
     </button>
-    <label class="tab" aria-label="Snap food">
-      <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Snap</span>
-      <input id="camera" type="file" accept="image/*" capture="environment">
-    </label>
   </nav>
+  <input id="camera" type="file" accept="image/*" capture="environment" hidden>
 </div>
 
 <!-- Toast -->
@@ -196,6 +245,7 @@
     <label class="lm"><span class="lm-ic"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg></span>Upload photo<input id="lmGallery" type="file" accept="image/*"></label>
     <button class="lm" data-act="scan"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 7V5h3M17 5h3v2M20 17v2h-3M7 19H4v-2"/><path d="M8 9v6M11 9v6M14 9v6M16.5 9v6"/></svg></span>Scan barcode</button>
     <button class="lm" data-act="type"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/></svg></span>Type food</button>
+    <button class="lm" data-act="checkin"><span class="lm-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9 14c.8 1 1.8 1.5 3 1.5s2.2-.5 3-1.5M9.5 10h0M14.5 10h0"/></svg></span>Check-in</button>
     <button class="lm" data-act="gut"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M12 21c-4.5-2.8-7-5.8-7-9.5A4 4 0 0 1 12 9a4 4 0 0 1 7 2.5c0 3.7-2.5 6.7-7 9.5z"/></svg></span>Gut check</button>
     <button class="lm" data-act="move"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M6 9v6M18 9v6M3 11v2M21 11v2M6 12h12"/></svg></span>Workout</button>
     <button class="lm" data-act="weight"><span class="lm-ic"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 9.5l3 3.5 3-3.5"/></svg></span>Weight</button>
@@ -221,6 +271,18 @@
     <label class="btn ghost">Choose photo<input id="mealLib" type="file" accept="image/*"></label>
   </div>
   <button class="btn link danger" id="mealNone">Remove this meal</button>
+</div>
+
+<!-- Morning check-in -->
+<div class="sheet" id="checkinSheet" hidden role="dialog" aria-labelledby="ciTitle">
+  <div class="grab"></div>
+  <h2 id="ciTitle">Morning check-in</h2>
+  <p class="muted small" style="margin:0">Tap what fits. Skip anything you like.</p>
+  <div class="ci-row"><span class="ci-k">Gut</span><div class="ci-opts" data-field="gut"><button data-v="good">Good</button><button data-v="meh">Meh</button><button data-v="rough">Rough</button></div></div>
+  <div class="ci-row"><span class="ci-k">Mood</span><div class="ci-opts mood" data-field="mood"><button data-v="1" aria-label="Very low">1</button><button data-v="2" aria-label="Low">2</button><button data-v="3" aria-label="Okay">3</button><button data-v="4" aria-label="Good">4</button><button data-v="5" aria-label="Great">5</button></div></div>
+  <div class="ci-row"><span class="ci-k">Energy</span><div class="ci-opts" data-field="energy"><button data-v="low">Low</button><button data-v="ok">Okay</button><button data-v="high">High</button></div></div>
+  <div class="ci-row"><span class="ci-k">Sleep</span><div class="ci-opts" data-field="sleep"><button data-v="poor">Poor</button><button data-v="ok">Okay</button><button data-v="great">Great</button></div></div>
+  <button class="btn primary big" id="ciDone">Done</button>
 </div>
 
 <!-- Gut sheet -->

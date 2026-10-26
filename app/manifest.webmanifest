@@ -1,6 +1,6 @@
 {
-  "name": "Fuel Log",
-  "short_name": "Fuel Log",
+  "name": "Fuel",
+  "short_name": "Fuel",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

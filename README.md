@@ -1,4 +1,4 @@
-# Fuel Log
+# Fuel
 
 George's meal, gut, workout and weight tracker. A phone-first web app (PWA) hosted on Azure Static Web Apps, signing in with Shirestone Entra ID and saving everything to SharePoint.
 
