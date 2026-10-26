@@ -393,10 +393,11 @@
     <input id="vapidKey" readonly>
     <button class="btn ghost sm" id="vapidCopy">Copy key</button>
   </div>
-  <p class="muted small" style="margin:0" id="whoami"></p>
-  <div class="two-btns">
-    <button class="btn ghost" id="signOut">Sign out</button>
-    <button class="btn primary" id="setSave">Save</button>
+  <button class="btn primary big" id="setSave">Save</button>
+  <div class="acct">
+    <span class="acct-av" id="acctAv" aria-hidden="true"></span>
+    <span class="acct-who"><b id="acctName"></b><span id="whoami"></span></span>
+    <button class="acct-out" id="signOut" aria-label="Sign out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4M6 12h10"/></svg><span>Sign out</span></button>
   </div>
 </div>
 

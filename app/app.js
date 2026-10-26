@@ -1166,7 +1166,10 @@
     document.querySelectorAll("[data-close]").forEach(b => b.onclick = closeSheets);
     $("openSettings").onclick = () => {
       $("setKcal").value = targets.kcal; $("setPro").value = targets.protein;
-      $("whoami").textContent = account ? `Signed in as ${account.username}` : "";
+      const nm = (account && (account.name || account.username)) || "";
+      $("acctName").textContent = nm;
+      $("whoami").textContent = account ? account.username : "";
+      $("acctAv").textContent = nm.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
       $("vapidBox").hidden = true; renderPushStatus();
       openSheet("settingsSheet");
     };
@@ -1179,7 +1182,20 @@
     $("pushBtn").onclick = enablePush;
     $("pushOff").onclick = disablePush;
     $("vapidCopy").onclick = async () => { try { await navigator.clipboard.writeText($("vapidKey").value); showToast("Key copied. Paste it into GitHub."); } catch (e) { $("vapidKey").select(); } };
-    $("signOut").onclick = () => pca.logoutRedirect({ account });
+    // Two taps to sign out (no accidental logouts). Clears Fuel's sign-in on this phone only,
+    // without the Microsoft "pick an account to sign out" page.
+    let outArmed = 0;
+    $("signOut").onclick = async () => {
+      const b = $("signOut");
+      if (Date.now() - outArmed > 3000) {
+        outArmed = Date.now(); b.classList.add("armed"); b.querySelector("span").textContent = "Tap to confirm";
+        setTimeout(() => { if (Date.now() - outArmed >= 3000) { b.classList.remove("armed"); b.querySelector("span").textContent = "Sign out"; } }, 3050);
+        return;
+      }
+      b.disabled = true; b.querySelector("span").textContent = "Signing out…";
+      try { await pca.logoutRedirect({ account, onRedirectNavigate: () => false }); } catch {}
+      location.replace("/");
+    };
 
     const pick = (id, slotFn) => $(id).addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) { const s = slotFn ? slotFn() : undefined; closeSheets(); onPhoto(f, s); } });
     pick("camera"); pick("camera2"); pick("lmCamera"); pick("lmGallery");

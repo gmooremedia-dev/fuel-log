@@ -342,3 +342,14 @@ label.icon-btn { position: relative; cursor: pointer; }
 .vapid code { font-size: 12px; }
 
 @media (prefers-reduced-motion: reduce) { *, .sheet { transition: none !important; animation: none !important; } }
+
+/* Account row in Settings */
+.acct { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 12px 0 2px; border-top: 1px solid var(--line); }
+.acct-av { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--sky); color: var(--moss-dark); font-weight: 700; font-size: 15px; }
+.acct-who { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.acct-who b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acct-who span { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acct-out { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--muted); background: transparent; border: 1.5px solid var(--line); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.acct-out svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.acct-out.armed { color: #fff; background: var(--berry); border-color: var(--berry); }
+.acct-out:disabled { opacity: .6; }
