@@ -1,5 +1,5 @@
 // POST /api/analyze  — estimate what's in a food photo with Claude.
-// Body: { image: "<base64 jpeg>", slot: "Lunch" }
+// Body: { image: "<base64 jpeg>", slot: "Lunch" }  or  { text: "chicken wrap and crisps", slot: "Lunch" }
 // Header: Authorization: Bearer <Microsoft Graph token from the app's sign-in>
 // App settings: ANTHROPIC_API_KEY (required), ALLOWED_USERS (comma-separated UPNs), FOOD_MODEL (optional)
 const { app } = require("@azure/functions");
@@ -18,7 +18,7 @@ Return ONLY a JSON object, no other text, in exactly this shape:
   "confidence": "low" | "medium" | "high",
   "note": "one short, plain sentence: the most useful observation (e.g. protein looks light, or sauce may hide dairy). No lecturing."
 }
-If the photo isn't food, return {"items":[],"calories":0,"protein_g":0,"flags":[],"confidence":"low","note":"No food spotted in this photo."}`;
+If it isn't food, return {"items":[],"calories":0,"protein_g":0,"flags":[],"confidence":"low","note":"No food spotted in this photo."}`;
 
 async function whoIs(authHeader) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
@@ -39,7 +39,16 @@ app.http("analyze", {
     let body;
     try { body = await request.json(); } catch { return { status: 400, jsonBody: { error: "Expected JSON." } }; }
     const image = typeof body.image === "string" ? body.image.replace(/^data:image\/\w+;base64,/, "") : "";
-    if (!image || image.length > 6_000_000) return { status: 400, jsonBody: { error: "Missing or oversized image." } };
+    const text = typeof body.text === "string" ? body.text.trim().slice(0, 200) : "";
+    if (!image && !text) return { status: 400, jsonBody: { error: "Send a photo or a description." } };
+    if (image.length > 6_000_000) return { status: 400, jsonBody: { error: "That photo is too big." } };
+    const slot = String(body.slot || "unknown").slice(0, 20);
+    const content = image
+      ? [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } },
+          { type: "text", text: `${PROMPT}\n\nMeal slot: ${slot}.` }
+        ]
+      : [{ type: "text", text: `${PROMPT}\n\nThere is no photo. Estimate from this description of what they ate, assuming typical UK portions: "${text.replace(/"/g, "'")}"\nMeal slot: ${slot}.` }];
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -51,13 +60,7 @@ app.http("analyze", {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 600,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } },
-            { type: "text", text: `${PROMPT}\n\nMeal slot: ${String(body.slot || "unknown").slice(0, 20)}.` }
-          ]
-        }]
+        messages: [{ role: "user", content }]
       })
     });
     if (!res.ok) {
@@ -65,10 +68,10 @@ app.http("analyze", {
       return { status: 502, jsonBody: { error: res.status === 429 ? "AI is busy, try again in a minute." : "Couldn't analyse that photo." } };
     }
     const data = await res.json();
-    const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("");
-    const match = text.match(/\{[\s\S]*\}/);
+    const answer = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("");
+    const match = answer.match(/\{[\s\S]*\}/);
     let result;
-    try { result = JSON.parse(match ? match[0] : text); } catch { return { status: 502, jsonBody: { error: "Couldn't read the AI's answer." } }; }
+    try { result = JSON.parse(match ? match[0] : answer); } catch { return { status: 502, jsonBody: { error: "Couldn't read the AI's answer." } }; }
     const clean = {
       items: Array.isArray(result.items) ? result.items.slice(0, 12).map(i => ({ name: String(i.name || "").slice(0, 60), portion: String(i.portion || "").slice(0, 60) })) : [],
       calories: Math.max(0, Math.round(Number(result.calories) || 0)),

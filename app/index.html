@@ -43,12 +43,14 @@
     <h2>Today's food</h2>
     <div class="meals" id="meals"></div>
     <div class="done-msg" id="doneMsg" hidden>Day done. Streak's safe.</div>
+    <ul class="extras" id="extras" hidden></ul>
+    <p class="day-total" id="dayTotal" hidden></p>
+    <button class="add-snack" id="addSnack">+ Add a snack or extra</button>
   </section>
 
   <section>
     <div class="h2row"><h2>Today's photos</h2><span class="muted small" id="photoCount"></span></div>
     <div class="photos" id="photos"><p class="muted small" id="noPhotos">No photos yet. Tap Snap when you eat.</p></div>
-    <p class="day-total" id="dayTotal" hidden></p>
   </section>
 
   <section>
@@ -90,12 +92,19 @@
   <div class="fab-space"></div>
 </main>
 
-<!-- Snap button -->
-<label class="fab" id="fab" hidden>
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-  <span>Snap food</span>
-  <input id="camera" type="file" accept="image/*" capture="environment">
-</label>
+<!-- Snap / upload buttons -->
+<div class="fabs" id="fab" hidden>
+  <label class="fab">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+    <span>Snap food</span>
+    <input id="camera" type="file" accept="image/*" capture="environment">
+  </label>
+  <label class="fab fab-alt" aria-label="Upload a photo">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg>
+    <span>Upload</span>
+    <input id="gallery" type="file" accept="image/*">
+  </label>
+</div>
 
 <!-- Toast after a photo -->
 <div class="toast" id="toast" hidden>
@@ -124,6 +133,21 @@
     <button class="ghost" id="wCancel">Cancel</button>
     <button class="primary" id="wSave">Save</button>
   </div>
+</div>
+
+<!-- Meal sheet -->
+<div class="sheet" id="mealSheet" hidden role="dialog" aria-labelledby="mealTitle">
+  <h2 id="mealTitle">What did you have?</h2>
+  <div class="opts" id="mealOpts"></div>
+  <form class="other" id="mealForm">
+    <input id="mealText" type="text" autocomplete="off" enterkeyhint="done" placeholder="Something else…">
+    <button class="primary" id="mealTextGo" type="submit">Log</button>
+  </form>
+  <div class="photo-row">
+    <label class="ghost">Take photo<input id="mealCam" type="file" accept="image/*" capture="environment"></label>
+    <label class="ghost">Choose photo<input id="mealLib" type="file" accept="image/*"></label>
+  </div>
+  <button class="link" id="mealNone">Didn't have it</button>
 </div>
 
 <script src="/config.js"></script>

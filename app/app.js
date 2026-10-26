@@ -7,18 +7,21 @@
   const PHOTO_ROOT = "Food Photos";
 
   // ---------- Meal plan ----------
+  // kcal / protein are rough plan estimates, used when you log a plan meal without a photo.
   const MEALS = {
-    b:   { slot: "Breakfast", name: "Green smoothie", what: "Lactose-free milk, whey isolate, spinach, berries, 30g oats, chia" },
-    lA:  { slot: "Lunch", name: "Chicken rice bowl", what: "Cooked chicken, half rice pouch, leaves, cucumber, tomatoes" },
-    lB:  { slot: "Lunch", name: "Tuna jacket", what: "Microwave jacket, tuna, 1 tbsp light mayo, side salad" },
-    d1:  { slot: "Dinner", name: "Salmon + Tenderstem", what: "Air fryer 180°C, 12 min. Half rice pouch" },
-    d2:  { slot: "Dinner", name: "Paprika chicken + beans", what: "Air fryer 200°C, 15 min. Jacket potato" },
-    d3:  { slot: "Dinner", name: "Burgers + sweet potato fries", what: "5% beef, no bun. Air fryer 200°C, 15 min. Salad" },
+    b:   { slot: "Breakfast", name: "Green smoothie", what: "Lactose-free milk, whey isolate, spinach, berries, 30g oats, chia", kcal: 450, protein: 40 },
+    lA:  { slot: "Lunch", name: "Chicken rice bowl", what: "Cooked chicken, half rice pouch, leaves, cucumber, tomatoes", kcal: 480, protein: 45 },
+    lB:  { slot: "Lunch", name: "Tuna jacket", what: "Microwave jacket, tuna, 1 tbsp light mayo, side salad", kcal: 420, protein: 35 },
+    d1:  { slot: "Dinner", name: "Salmon + Tenderstem", what: "Air fryer 180°C, 12 min. Half rice pouch", kcal: 550, protein: 40 },
+    d2:  { slot: "Dinner", name: "Paprika chicken + beans", what: "Air fryer 200°C, 15 min. Jacket potato", kcal: 520, protein: 48 },
+    d3:  { slot: "Dinner", name: "Burgers + sweet potato fries", what: "5% beef, no bun. Air fryer 200°C, 15 min. Salad", kcal: 560, protein: 45 },
     dAny:{ slot: "Dinner", name: "Your pick", what: "Salmon, paprika chicken or burgers" }
   };
   const LUNCH  = ["lA", "lA", "lB", "lA", "lB", "lA", "lB"];      // indexed by getDay(), 0 = Sunday
   const DINNER = ["dAny", "d1", "d2", "d3", "d1", "d2", "d3"];
+  const OPTIONS = { b: ["b"], l: ["lA", "lB"], d: ["d1", "d2", "d3"] };
   const SLOT_FIELD = { Breakfast: "b", Lunch: "l", Dinner: "d", Snack: null };
+  const FIELD_SLOT = { b: "Breakfast", l: "Lunch", d: "Dinner" };
 
   // ---------- Helpers ----------
   const $ = id => document.getElementById(id);
@@ -217,38 +220,87 @@
     r.readAsDataURL(blob);
   });
   const foodFor = name => (getDay(todayKey()).foods || []).find(f => f.file === name);
+  const foodForField = field => (getDay(todayKey()).foods || []).find(f => f.key === field);
+  // One food record per main meal (key b/l/d, latest wins); snacks each get their own record.
+  const keyFor = (slot, time) => SLOT_FIELD[slot] || `snack-${(time || "").replace(":", "")}-${Date.now() % 100000}`;
+  function upsertFood(rec, extraPatch = {}) {
+    const foods = (getDay(todayKey()).foods || []).filter(f => f.key !== rec.key && !(rec.file && f.file === rec.file));
+    foods.push(rec);
+    const field = SLOT_FIELD[rec.slot];
+    change({ ...(field ? { [field]: true } : {}), ...extraPatch, foods });
+  }
+
+  async function callAI(payload) {
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + await token() },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Couldn't get an estimate.");
+    return data;
+  }
+  function announce(name, data) {
+    showToast(`${name} · ~${data.calories} kcal, ${data.protein_g}g protein${data.note ? ". " + data.note : ""}`, null, 7000);
+  }
 
   async function analyse(entry, blob) {
-    entry.analysing = true; renderPhotos();
+    entry.analysing = true; renderPhotos(); render();
     try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + await token() },
-        body: JSON.stringify({ image: await blobToBase64(blob), slot: entry.slot })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Couldn't analyse that photo.");
-      const food = { file: entry.name, slot: entry.slot, time: entry.time, ...data };
-      const foods = (getDay(todayKey()).foods || []).filter(f => f.file !== entry.name).concat(food);
-      change({ foods });
-      const what = data.items.map(i => i.name).slice(0, 3).join(", ");
-      if (what) showToast(`${what} · ~${data.calories} kcal, ${data.protein_g}g protein${data.note ? ". " + data.note : ""}`, null, 7000);
+      const data = await callAI({ image: await blobToBase64(blob), slot: entry.slot });
+      const name = data.items.map(i => i.name).slice(0, 3).join(", ") || "Photo";
+      entry.key = entry.key || keyFor(entry.slot, entry.time);
+      upsertFood({ key: entry.key, slot: entry.slot, time: entry.time, source: "photo", file: entry.name, name, ...data });
+      announce(name, data);
     } catch (e) {
       entry.aiError = e.message;
-    } finally { entry.analysing = false; renderPhotos(); }
+      if (/set up|ANTHROPIC/.test(e.message)) showToast(e.message, null, 5000);
+    } finally { entry.analysing = false; renderPhotos(); render(); }
+  }
+
+  async function logText(field, text) {
+    const slot = FIELD_SLOT[field] || "Snack";
+    const now = new Date(), time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const key = field || keyFor("Snack", time);
+    upsertFood({ key, slot, time, source: "text", name: text, calories: 0, protein_g: 0, flags: [], items: [], pendingAI: true });
+    showToast(`Logged "${text}". Estimating…`);
+    try {
+      const data = await callAI({ text, slot });
+      upsertFood({ key, slot, time, source: "text", name: text, ...data });
+      announce(text, data);
+    } catch (e) {
+      upsertFood({ key, slot, time, source: "text", name: text, calories: 0, protein_g: 0, flags: [], items: [] });
+      showToast(`Logged "${text}" (no estimate).`);
+    }
+  }
+
+  function logPlan(field, mk) {
+    const m = MEALS[mk];
+    const now = new Date();
+    upsertFood({ key: field, slot: m.slot, time: `${pad(now.getHours())}:${pad(now.getMinutes())}`, source: "plan", name: m.name,
+      calories: m.kcal || 0, protein_g: m.protein || 0, flags: [], items: [], note: "" });
+  }
+
+  function unlog(field) {
+    const foods = (getDay(todayKey()).foods || []).filter(f => f.key !== field);
+    change({ [field]: false, foods });
   }
 
   let lastUpload = null, toastTimer = null;
-  async function onPhoto(file) {
+  async function onPhoto(file, slotOverride) {
     if (!file) return;
     const now = new Date();
-    const slot = slotForNow(now);
+    // Gallery uploads from earlier today keep their own time; otherwise use now.
+    const taken = file.lastModified && isoDate(new Date(file.lastModified)) === todayKey() ? new Date(file.lastModified) : now;
+    const slot = slotOverride || slotForNow(taken);
+    const time = `${pad(taken.getHours())}:${pad(taken.getMinutes())}`;
     const local = URL.createObjectURL(file);
-    const entry = { id: null, name: `${pad(now.getHours())}${pad(now.getMinutes())}-${slot}.jpg`, thumb: local, local: true, slot, time: `${pad(now.getHours())}:${pad(now.getMinutes())}` };
+    const entry = { id: null, name: `${time.replace(":", "")}-${slot}.jpg`, thumb: local, local: true, slot, time };
+    entry.key = keyFor(slot, time);
     todaysPhotos.push(entry); lastUpload = entry; renderPhotos();
     const field = SLOT_FIELD[slot];
     if (field && !getDay(todayKey())[field]) change({ [field]: true });
-    showToast(`Logged as ${slot}. Wrong? Tap to change.`, slot);
+    showToast(slotOverride ? `Added to ${slot}.` : `Logged as ${slot}. Wrong? Tap to change.`, slotOverride ? null : slot);
     let blob;
     try { blob = await shrink(file); } catch (e) { showToast(e.message); return; }
     try {
@@ -262,7 +314,7 @@
         await graph(`/sites/${siteId}/drive/items/${entry.id}`, { method: "PATCH", body: JSON.stringify({ name: entry.name }) }).catch(() => {});
       }
     } catch (e) {
-      showToast("Photo didn't upload. Check your signal and snap again.");
+      showToast("Photo didn't upload. Check your signal and try again.");
       todaysPhotos = todaysPhotos.filter(p => p !== entry); renderPhotos();
       return;
     }
@@ -270,15 +322,18 @@
   }
   async function reslot(newSlot) {
     const entry = lastUpload || todaysPhotos[todaysPhotos.length - 1];
-    if (!entry) return;
+    if (!entry || entry.slot === newSlot) return;
     const oldField = SLOT_FIELD[entry.slot], newField = SLOT_FIELD[newSlot];
-    const patch = {};
-    if (oldField && oldField !== newField) patch[oldField] = false;
-    if (newField) patch[newField] = true;
-    const oldName = entry.name;
+    const oldName = entry.name, oldKey = entry.key;
     entry.slot = newSlot; entry.name = entry.name.replace(/(Breakfast|Lunch|Dinner|Snack)/, newSlot);
-    const foods = (getDay(todayKey()).foods || []).map(f => f.file === oldName ? { ...f, file: entry.name, slot: newSlot } : f);
-    patch.foods = foods;
+    entry.key = keyFor(newSlot, entry.time);
+    let foods = (getDay(todayKey()).foods || []);
+    const rec = foods.find(f => f.key === oldKey || f.file === oldName);
+    foods = foods.filter(f => f !== rec && (!newField || f.key !== newField));
+    if (rec) foods.push({ ...rec, key: entry.key, slot: newSlot, file: entry.name });
+    const patch = { foods };
+    if (oldField && !foods.some(f => f.key === oldField)) patch[oldField] = false;
+    if (newField) patch[newField] = true;
     change(patch); renderPhotos();
     showToast(`Moved to ${newSlot}.`);
     if (entry.id) {
@@ -322,12 +377,24 @@
       btn.className = "meal"; btn.id = "meal-" + field;
       btn.setAttribute("aria-pressed", t[field] ? "true" : "false");
       btn.innerHTML = '<div class="txt"><div class="slot"></div><div class="name"></div><div class="what"></div></div><div class="tick"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>';
-      btn.querySelector(".slot").textContent = m.slot;
-      btn.querySelector(".name").textContent = m.name;
-      btn.querySelector(".what").textContent = m.what;
-      btn.onclick = () => change({ [field]: !getDay(todayKey())[field] });
+      const rec = foodForField(field);
+      const photoBusy = todaysPhotos.some(p => p.key === field && p.analysing);
+      btn.querySelector(".slot").textContent = t[field] ? `${m.slot} · logged` : `${m.slot} · plan`;
+      btn.querySelector(".name").textContent = t[field] && rec ? rec.name : t[field] && photoBusy ? "Spotting your photo…" : m.name;
+      btn.querySelector(".what").textContent = t[field] && rec
+        ? (rec.pendingAI ? "Estimating…" : rec.calories ? `~${rec.calories} kcal · ${rec.protein_g}g protein${rec.flags && rec.flags.length ? " · watch: " + rec.flags.join(", ") : ""}` : "Logged")
+        : t[field] ? "Logged" : `${m.what}. Tap to log what you had.`;
+      btn.onclick = () => openMealSheet(field, mk);
       wrap.appendChild(btn);
     });
+    const extras = (t.foods || []).filter(f => String(f.key).startsWith("snack") && f.source === "text");
+    const ex = $("extras"); ex.textContent = "";
+    extras.forEach(f => {
+      const li = document.createElement("li");
+      li.textContent = `${f.time} · ${f.name}` + (f.pendingAI ? " (estimating…)" : f.calories ? ` · ~${f.calories} kcal` : "");
+      ex.appendChild(li);
+    });
+    ex.hidden = !extras.length;
     const left = ["b", "l", "d"].filter(f => !t[f]).length;
     $("headline").textContent = left === 0 ? "All done today" : left === 3 ? "Three ticks today" : `${left} to go`;
     $("doneMsg").hidden = left !== 0;
@@ -397,6 +464,32 @@
     $("dayTotal").textContent = `So far today: ~${t.kcal.toLocaleString("en-GB")} kcal · ${t.protein}g protein`;
   }
 
+  // ---------- Meal sheet ----------
+  let sheetField = null;
+  function openMealSheet(field, plannedKey) {
+    sheetField = field;
+    const t = getDay(todayKey());
+    const rec = field ? foodForField(field) : null;
+    $("mealTitle").textContent = field ? `What did you have for ${FIELD_SLOT[field].toLowerCase()}?` : "Add a snack or extra";
+    const box = $("mealOpts"); box.textContent = "";
+    (field ? OPTIONS[field] : []).forEach(mk => {
+      const m = MEALS[mk];
+      const b = document.createElement("button");
+      b.className = "opt" + (rec && rec.source === "plan" && rec.name === m.name ? " on" : "");
+      b.innerHTML = "<span><b></b><small></small></span>";
+      b.querySelector("b").textContent = m.name;
+      b.querySelector("small").textContent = `~${m.kcal} kcal · ${m.protein}g protein`;
+      if (mk === plannedKey) { const s = document.createElement("span"); s.className = "badge"; s.textContent = "Today's plan"; b.appendChild(s); }
+      b.onclick = () => { logPlan(field, mk); closeSheets(); showToast(`${m.name} logged.`); };
+      box.appendChild(b);
+    });
+    box.hidden = !field;
+    $("mealText").value = rec && rec.source === "text" ? rec.name : "";
+    $("mealNone").hidden = !(field && t[field]);
+    $("scrim").hidden = false; $("mealSheet").hidden = false;
+  }
+  function closeSheets() { $("scrim").hidden = true; $("mealSheet").hidden = true; $("sheet").hidden = true; }
+
   // ---------- Weight sheet ----------
   let wVal = 84.0;
   function openSheet() {
@@ -405,20 +498,32 @@
     $("wValue").textContent = wVal.toFixed(1);
     $("scrim").hidden = false; $("sheet").hidden = false;
   }
-  function closeSheet() { $("scrim").hidden = true; $("sheet").hidden = true; }
+  function closeSheet() { closeSheets(); }
 
   // ---------- Wire up ----------
   function wire() {
     document.querySelectorAll("#gut .chip").forEach(c => c.onclick = () => change({ gut: getDay(todayKey()).gut === c.dataset.v ? null : c.dataset.v }));
     $("move").onclick = () => change({ move: !getDay(todayKey()).move });
     $("weightCard").onclick = openSheet;
-    $("scrim").onclick = closeSheet; $("wCancel").onclick = closeSheet;
+    $("scrim").onclick = closeSheets; $("wCancel").onclick = closeSheets;
     document.querySelectorAll(".steppers button").forEach(b => b.onclick = () => {
       wVal = Math.max(30, Math.min(250, Math.round((wVal + parseFloat(b.dataset.step)) * 10) / 10));
       $("wValue").textContent = wVal.toFixed(1);
     });
     $("wSave").onclick = () => { change({ weight: wVal }); closeSheet(); showToast(`Saved ${wVal.toFixed(1)} kg.`); };
-    $("camera").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; onPhoto(f); });
+    const pick = (id, slotFn) => $(id).addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onPhoto(f, slotFn && slotFn()); });
+    pick("camera"); pick("gallery");
+    const sheetSlot = () => sheetField ? FIELD_SLOT[sheetField] : "Snack";
+    pick("mealCam", () => { const s = sheetSlot(); closeSheets(); return s; });
+    pick("mealLib", () => { const s = sheetSlot(); closeSheets(); return s; });
+    $("mealForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const text = $("mealText").value.trim();
+      if (!text) { $("mealText").focus(); return; }
+      const f = sheetField; closeSheets(); logText(f, text.slice(0, 120));
+    });
+    $("mealNone").onclick = () => { const f = sheetField; closeSheets(); if (f) { unlog(f); showToast(`${FIELD_SLOT[f]} cleared.`); } };
+    $("addSnack").onclick = () => openMealSheet(null);
     $("toastSlots").querySelectorAll("button").forEach(b => b.onclick = () => reslot(b.dataset.slot));
     window.addEventListener("online", () => { if (pending.size) flush(); });
     document.addEventListener("visibilitychange", () => {
