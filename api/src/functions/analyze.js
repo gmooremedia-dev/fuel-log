@@ -32,7 +32,9 @@ app.http("analyze", {
   methods: ["POST"],
   authLevel: "anonymous",
   handler: async (request, context) => {
-    const upn = await whoIs(request.headers.get("authorization"));
+    // Static Web Apps reserves the Authorization header, so the app sends its Graph token in X-Fuel-Token.
+    const raw = request.headers.get("x-fuel-token");
+    const upn = await whoIs(raw ? "Bearer " + raw : request.headers.get("authorization"));
     if (!upn || !ALLOWED.includes(upn)) return { status: 401, jsonBody: { error: "Sign in with an allowed Shirestone account." } };
     if (!process.env.ANTHROPIC_API_KEY) return { status: 503, jsonBody: { error: "Food spotting isn't set up yet: add ANTHROPIC_API_KEY in the Static Web App's environment variables." } };
 

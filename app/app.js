@@ -206,7 +206,7 @@
   async function callAI(payload) {
     const res = await fetch("/api/analyze", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + await token() },
+      headers: { "Content-Type": "application/json", "X-Fuel-Token": await token() },
       body: JSON.stringify(payload)
     });
     const data = await res.json().catch(() => ({}));
@@ -227,18 +227,48 @@
       showToast(/set up|ANTHROPIC/.test(e.message) ? e.message : "Photo saved, but I couldn't estimate it. Tap the meal to type it instead.", null, 5000);
     } finally { entry.analysing = false; renderAll(); }
   }
-  async function logText(field, text) {
-    const slot = FIELD_SLOT[field] || "Snack", time = nowTime();
-    const key = field || keyFor("Snack", time);
+  function slotFromText(text) {
+    const t = text.toLowerCase();
+    if (/\bbreakfast\b/.test(t)) return "Breakfast";
+    if (/\blunch\b/.test(t)) return "Lunch";
+    if (/\b(dinner|tea|supper)\b/.test(t)) return "Dinner";
+    if (/\bsnack\b/.test(t)) return "Snack";
+    return null;
+  }
+  async function logText(field, text, opts = {}) {
+    // From a meal's own sheet: that meal. From "Type food": what the words say, else the time of day.
+    const slot = field ? FIELD_SLOT[field] : (opts.slot || slotFromText(text) || slotForNow());
+    const f = SLOT_FIELD[slot];
+    const time = opts.time || nowTime();
+    const key = opts.key || f || keyFor("Snack", time);
     upsertFood({ key, slot, time, source: "text", name: text, calories: 0, protein_g: 0, flags: [], items: [], pendingAI: true });
     try {
       const data = await callAI({ text, slot });
       upsertFood({ key, slot, time, source: "text", name: text, base: { kcal: data.calories, protein: data.protein_g }, portion: 1, ...data });
-      announce(text, data);
+      if (!opts.quiet) announce(text, data);
     } catch (e) {
-      upsertFood({ key, slot, time, source: "text", name: text, calories: 0, protein_g: 0, flags: [], items: [] });
-      showToast(`Logged "${text}", but I couldn't estimate it right now.`);
+      upsertFood({ key, slot, time, source: "text", name: text, calories: 0, protein_g: 0, flags: [], items: [], aiError: e.message });
+      if (!opts.quiet) showToast(`Saved "${text}", but couldn't estimate it: ${e.message}`, null, 6000);
     }
+  }
+  // Re-estimate anything saved without calories (e.g. while offline or before a fix), and move
+  // typed items that clearly name a meal into that meal.
+  let repairing = false;
+  async function repairFoods() {
+    if (repairing) return; repairing = true;
+    try {
+      const t = getDay(todayKey());
+      for (const f of (t.foods || []).filter(x => x.source === "text" && !x.calories && !x.pendingAI)) {
+        const named = slotFromText(f.name);
+        if (named && named !== f.slot) {
+          const foods = (getDay(todayKey()).foods || []).filter(x => x.key !== f.key);
+          change({ foods });
+          await logText(SLOT_FIELD[named] || null, f.name, { slot: named, time: f.time, quiet: true });
+        } else {
+          await logText(SLOT_FIELD[f.slot] || null, f.name, { slot: f.slot, time: f.time, key: f.key, quiet: true });
+        }
+      }
+    } finally { repairing = false; }
   }
   function logPlan(field, mk) {
     const m = MEALS[mk];
@@ -946,8 +976,13 @@
       x.onclick = () => { removeFood(it.key); openMealSheet(field, plannedKey); };
       row.append(b, x); wrapI.appendChild(row);
       const meta = document.createElement("div"); meta.className = "ln-meta";
-      meta.textContent = it.pendingAI ? "Estimating…" : it.calories ? `~${fmt(it.calories)} kcal · ${it.protein_g}g protein${it.flags && it.flags.length ? " · contains " + it.flags.join(", ") : ""}` : "No estimate";
+      meta.textContent = it.pendingAI ? "Estimating…" : it.calories ? `~${fmt(it.calories)} kcal · ${it.protein_g}g protein${it.flags && it.flags.length ? " · contains " + it.flags.join(", ") : ""}` : "No estimate yet";
       wrapI.appendChild(meta);
+      if (!it.calories && !it.pendingAI && it.source === "text") {
+        const rb = document.createElement("button"); rb.className = "btn ghost sm"; rb.textContent = "Estimate calories";
+        rb.onclick = async () => { closeSheets(); await logText(SLOT_FIELD[it.slot] || null, it.name, { slot: it.slot, time: it.time, key: it.key }); };
+        wrapI.appendChild(rb);
+      }
       if (it.note) { const n = document.createElement("div"); n.className = "ln-note"; n.textContent = it.note; wrapI.appendChild(n); }
       if (it.calories && it.source !== "barcode") {
         const pr = document.createElement("div"); pr.className = "portion";
@@ -1124,7 +1159,7 @@
   async function refresh() {
     if (Date.now() - lastRefresh < 30000) return;
     lastRefresh = Date.now();
-    try { if (pending.size) await flush(); await pull(); renderAll(); loadPhotos(); loadProgress(); setStatus("Synced"); }
+    try { if (pending.size) await flush(); await pull(); renderAll(); loadPhotos(); loadProgress(); setStatus("Synced"); repairFoods(); }
     catch (e) { setStatus(navigator.onLine ? "Couldn't reach SharePoint · saved on this phone" : "Offline · saved on this phone"); }
   }
 
