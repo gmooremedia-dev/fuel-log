@@ -29,7 +29,7 @@
   const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const today = () => new Date();
   const todayKey = () => isoDate(today());
-  const blank = () => ({ b: false, l: false, d: false, gut: null, move: false, weight: null, foods: [] });
+  const blank = () => ({ b: false, l: false, d: false, gut: null, move: false, weight: null, waist: null, foods: [] });
   const totals = r => (r.foods || []).reduce((a, f) => ({ kcal: a.kcal + (f.calories || 0), protein: a.protein + (f.protein_g || 0) }), { kcal: 0, protein: 0 });
   const store = {
     get(k, f) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; } catch (e) { return f; } },
@@ -89,7 +89,7 @@
   }
 
   async function ensureSetup() {
-    if (ids && ids.siteId && ids.listId && ids.v === 2) return ids;
+    if (ids && ids.siteId && ids.listId && ids.v === 3) return ids;
     const u = new URL(CFG.siteUrl);
     const site = await graph(`/sites/${u.hostname}:${u.pathname.replace(/\/$/, "")}`);
     const lists = await graph(`/sites/${site.id}/lists?$select=id,displayName&$top=200`);
@@ -117,17 +117,18 @@
     const wanted = [
       { name: "FoodsJson", text: { allowMultipleLines: true, linesForEditing: 6 } },
       { name: "Calories", number: { decimalPlaces: "none" } },
-      { name: "ProteinG", number: { decimalPlaces: "none" } }
+      { name: "ProteinG", number: { decimalPlaces: "none" } },
+      { name: "WaistCm", number: { decimalPlaces: "one" } }
     ];
     for (const c of wanted) if (!have.has(c.name)) await graph(`/sites/${site.id}/lists/${list.id}/columns`, { method: "POST", body: JSON.stringify(c) });
-    ids = { siteId: site.id, listId: list.id, v: 2 };
+    ids = { siteId: site.id, listId: list.id, v: 3 };
     store.set("fuel.ids", ids);
     return ids;
   }
 
   async function pull() {
     const { siteId, listId } = await ensureSetup();
-    let url = `/sites/${siteId}/lists/${listId}/items?$expand=fields($select=Title,Breakfast,Lunch,Dinner,Gut,Moved,WeightKg,FoodsJson)&$top=500`;
+    let url = `/sites/${siteId}/lists/${listId}/items?$expand=fields($select=Title,Breakfast,Lunch,Dinner,Gut,Moved,WeightKg,WaistCm,FoodsJson)&$top=500`;
     while (url) {
       const page = await graph(url);
       for (const it of page.value || []) {
@@ -136,7 +137,7 @@
         itemIds[f.Title] = it.id;
         let foods = [];
         try { foods = f.FoodsJson ? JSON.parse(f.FoodsJson) : []; } catch (e) {}
-        days[f.Title] = { b: !!f.Breakfast, l: !!f.Lunch, d: !!f.Dinner, gut: f.Gut || null, move: !!f.Moved, weight: typeof f.WeightKg === "number" ? f.WeightKg : null, foods };
+        days[f.Title] = { b: !!f.Breakfast, l: !!f.Lunch, d: !!f.Dinner, gut: f.Gut || null, move: !!f.Moved, weight: typeof f.WeightKg === "number" ? f.WeightKg : null, waist: typeof f.WaistCm === "number" ? f.WaistCm : null, foods };
       }
       url = page["@odata.nextLink"] || null;
     }
@@ -154,6 +155,7 @@
           const r = getDay(key);
           const fields = { Title: key, Breakfast: r.b, Lunch: r.l, Dinner: r.d, Gut: r.gut || "", Moved: r.move };
           if (typeof r.weight === "number") fields.WeightKg = r.weight;
+          if (typeof r.waist === "number") fields.WaistCm = r.waist;
           if (r.foods && r.foods.length) {
             const t = totals(r);
             fields.FoodsJson = JSON.stringify(r.foods); fields.Calories = t.kcal; fields.ProteinG = t.protein;
@@ -464,6 +466,93 @@
     $("dayTotal").textContent = `So far today: ~${t.kcal.toLocaleString("en-GB")} kcal · ${t.protein}g protein`;
   }
 
+  // ---------- Progress photos ----------
+  const PROGRESS_ROOT = "Progress Photos";
+  const POSES = ["front", "side", "back"];
+  let progress = [];           // [{date, pose, id, url}]
+  let revealed = false;
+  async function loadProgress() {
+    try {
+      const { siteId } = await ensureSetup();
+      let url = `/sites/${siteId}/drive/root:/${encPath(PROGRESS_ROOT)}:/children?$expand=thumbnails&$select=id,name&$top=500`;
+      const out = [];
+      while (url) {
+        const res = await graph(url);
+        for (const f of res.value || []) {
+          const m = f.name.match(/^(\d{4}-\d{2}-\d{2})-(front|side|back)/);
+          const th = f.thumbnails && f.thumbnails[0];
+          if (m && th) out.push({ date: m[1], pose: m[2], id: f.id, url: (th.large || th.medium || {}).url, thumb: (th.medium || th.small || {}).url });
+        }
+        url = res["@odata.nextLink"] || null;
+      }
+      progress = out.sort((a, b) => a.date.localeCompare(b.date));
+    } catch (e) { if (e.status !== 404) console.warn(e); }
+    renderProgress();
+  }
+  function latestPerPose() {
+    const m = {};
+    progress.forEach(p => { m[p.pose] = p; });
+    return m;
+  }
+  function renderProgress() {
+    const box = $("progressThumbs"); box.textContent = "";
+    const latest = latestPerPose();
+    POSES.forEach(pose => {
+      const p = latest[pose];
+      const el = document.createElement("div"); el.className = "pthumb" + (revealed ? "" : " private");
+      if (p && p.thumb) { const img = document.createElement("img"); img.alt = ""; img.src = p.thumb; el.appendChild(img); }
+      else { const e = document.createElement("div"); e.className = "pempty"; e.textContent = "None yet"; el.appendChild(e); }
+      const s = document.createElement("span"); s.textContent = pose + (p ? " · " + new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""); el.appendChild(s);
+      box.appendChild(el);
+    });
+    const last = progress.length ? progress[progress.length - 1].date : null;
+    const daysSince = last ? Math.floor((new Date(todayKey()) - new Date(last)) / 86400000) : null;
+    $("progressHint").textContent = !last ? "Front, side and back, same spot and lighting each time. Once a week is plenty."
+      : daysSince >= 7 ? `Last photos ${daysSince} days ago. Due for this week's.` : `Last photos ${daysSince === 0 ? "today" : daysSince + " days ago"}. Next ones in ${7 - daysSince} days.`;
+    $("compareBtn").disabled = new Set(progress.map(p => p.date)).size < 2;
+    $("revealBtn").textContent = revealed ? "Hide" : "Show";
+    const t = getDay(todayKey());
+    $("waistValue").textContent = typeof t.waist === "number" ? t.waist.toFixed(1) : (lastWaist() ?? 90).toFixed(1);
+  }
+  function lastWaist() {
+    const ks = Object.keys(days).sort().filter(k => typeof days[k].waist === "number");
+    return ks.length ? days[ks[ks.length - 1]].waist : null;
+  }
+  async function uploadProgress(file, pose) {
+    if (!file) return;
+    showToast(`Saving ${pose} photo…`);
+    try {
+      const blob = await shrink(file, 2000);
+      const { siteId } = await ensureSetup();
+      await graph(`/sites/${siteId}/drive/root:/${encPath(PROGRESS_ROOT + "/" + todayKey() + "-" + pose + ".jpg")}:/content`, { method: "PUT", body: blob, headers: { "Content-Type": "image/jpeg" } });
+      showToast(`${pose[0].toUpperCase() + pose.slice(1)} photo saved.`);
+      await loadProgress();
+    } catch (e) { showToast("Photo didn't save. Try again."); }
+  }
+  function openCompare() {
+    const dates = [...new Set(progress.map(p => p.date))];
+    if (dates.length < 2) return;
+    const fill = (sel, val) => { sel.textContent = ""; dates.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }); sel.appendChild(o); }); sel.value = val; };
+    fill($("cmpA"), dates[0]); fill($("cmpB"), dates[dates.length - 1]);
+    $("cmpPose").value = "front";
+    drawCompare();
+    $("scrim").hidden = false; $("compareSheet").hidden = false;
+  }
+  function drawCompare() {
+    const pose = $("cmpPose").value;
+    const pick = d => progress.find(p => p.date === d && p.pose === pose);
+    [["cmpImgA", $("cmpA").value], ["cmpImgB", $("cmpB").value]].forEach(([id, d]) => {
+      const p = pick(d), img = $(id);
+      if (p && p.url) { img.src = p.url; img.hidden = false; img.nextElementSibling.hidden = true; }
+      else { img.hidden = true; img.nextElementSibling.hidden = false; }
+    });
+    const wa = days[$("cmpA").value] || {}, wb = days[$("cmpB").value] || {};
+    const bits = [];
+    if (typeof wa.weight === "number" && typeof wb.weight === "number") bits.push(`Weight ${(wb.weight - wa.weight >= 0 ? "+" : "")}${(wb.weight - wa.weight).toFixed(1)} kg`);
+    if (typeof wa.waist === "number" && typeof wb.waist === "number") bits.push(`waist ${(wb.waist - wa.waist >= 0 ? "+" : "")}${(wb.waist - wa.waist).toFixed(1)} cm`);
+    $("cmpStats").textContent = bits.join(", ");
+  }
+
   // ---------- Meal sheet ----------
   let sheetField = null;
   function openMealSheet(field, plannedKey) {
@@ -488,7 +577,7 @@
     $("mealNone").hidden = !(field && t[field]);
     $("scrim").hidden = false; $("mealSheet").hidden = false;
   }
-  function closeSheets() { $("scrim").hidden = true; $("mealSheet").hidden = true; $("sheet").hidden = true; }
+  function closeSheets() { $("scrim").hidden = true; $("mealSheet").hidden = true; $("sheet").hidden = true; $("compareSheet").hidden = true; }
 
   // ---------- Weight sheet ----------
   let wVal = 84.0;
@@ -524,6 +613,16 @@
     });
     $("mealNone").onclick = () => { const f = sheetField; closeSheets(); if (f) { unlog(f); showToast(`${FIELD_SLOT[f]} cleared.`); } };
     $("addSnack").onclick = () => openMealSheet(null);
+    POSES.forEach(pose => $("pp-" + pose).addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; uploadProgress(f, pose); }));
+    $("revealBtn").onclick = () => { revealed = !revealed; renderProgress(); };
+    $("compareBtn").onclick = openCompare;
+    ["cmpA", "cmpB", "cmpPose"].forEach(id => $(id).onchange = drawCompare);
+    $("cmpClose").onclick = closeSheets;
+    document.querySelectorAll("#waistSteps button").forEach(b => b.onclick = () => {
+      const cur = typeof getDay(todayKey()).waist === "number" ? getDay(todayKey()).waist : (lastWaist() ?? 90);
+      const v = Math.max(50, Math.min(160, Math.round((cur + parseFloat(b.dataset.step)) * 10) / 10));
+      change({ waist: v }); renderProgress();
+    });
     $("toastSlots").querySelectorAll("button").forEach(b => b.onclick = () => reslot(b.dataset.slot));
     window.addEventListener("online", () => { if (pending.size) flush(); });
     document.addEventListener("visibilitychange", () => {
@@ -535,7 +634,7 @@
   async function refresh() {
     if (Date.now() - lastRefresh < 30000) return;
     lastRefresh = Date.now();
-    try { if (pending.size) await flush(); await pull(); render(); loadPhotos(); setStatus("Synced to SharePoint."); }
+    try { if (pending.size) await flush(); await pull(); render(); loadPhotos(); loadProgress(); setStatus("Synced to SharePoint."); }
     catch (e) { setStatus(navigator.onLine ? "Couldn't reach SharePoint. Saved on this phone." : "Offline. Saved on this phone."); }
   }
 
@@ -554,7 +653,7 @@
       return;
     }
     $("app").hidden = false; $("fab").hidden = false;
-    wire(); render(); renderPhotos();
+    wire(); render(); renderPhotos(); renderProgress();
     setStatus("Syncing…");
     refresh();
   }

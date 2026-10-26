@@ -178,3 +178,28 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: va
 .link { background: none; border: 0; color: var(--berry); font-weight: 600; padding: 8px; }
 .sheet { max-height: 88vh; overflow-y: auto; }
 .extras { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Body progress */
+.small-link { font-size: 13px; padding: 0; color: var(--accent); }
+.pthumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pthumb { position: relative; min-width: 0; }
+.pthumb img, .pempty { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; display: block; background: var(--line); }
+.pempty { display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+.pthumb.private img { filter: blur(14px) saturate(.6); }
+.pthumb img { clip-path: inset(0 round 12px); }
+.pthumb span { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.pose-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.pose-row label { text-align: center; position: relative; cursor: pointer; padding: 12px 8px; }
+.pose-row input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.waist { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; padding: 14px 16px; border-radius: 16px; background: var(--card); border: 1.5px solid var(--line); }
+.w-mid { font-family: var(--display); font-weight: 800; font-size: 24px; font-variant-numeric: tabular-nums; }
+.waist-steps { display: flex; gap: 6px; }
+.waist-steps button { padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.wide-btn { width: 100%; margin-top: 10px; }
+.wide-btn:disabled { opacity: .5; }
+.cmp-controls { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; }
+.cmp-controls select { min-width: 0; padding: 10px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 15px; }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cmp figure { margin: 0; min-width: 0; }
+.cmp img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; background: var(--line); }
+.cmp-stats { text-align: center; font-weight: 600; margin: 0; font-variant-numeric: tabular-nums; }

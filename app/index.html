@@ -79,6 +79,22 @@
   </section>
 
   <section>
+    <div class="h2row"><h2>Body progress</h2><button class="link small-link" id="revealBtn">Show</button></div>
+    <div class="pthumbs" id="progressThumbs"></div>
+    <p class="muted small" id="progressHint"></p>
+    <div class="pose-row">
+      <label class="ghost">Front<input id="pp-front" type="file" accept="image/*"></label>
+      <label class="ghost">Side<input id="pp-side" type="file" accept="image/*"></label>
+      <label class="ghost">Back<input id="pp-back" type="file" accept="image/*"></label>
+    </div>
+    <div class="waist">
+      <div><div class="muted small">Waist today, at belly button</div><div class="w-mid"><span id="waistValue">90.0</span> cm</div></div>
+      <div class="waist-steps" id="waistSteps"><button data-step="-0.5">−0.5</button><button data-step="0.5">+0.5</button></div>
+    </div>
+    <button class="ghost wide-btn" id="compareBtn" disabled>Compare photos</button>
+  </section>
+
+  <section>
     <h2>Last 14 days</h2>
     <div class="strip" id="strip"></div>
     <div class="legend">
@@ -133,6 +149,22 @@
     <button class="ghost" id="wCancel">Cancel</button>
     <button class="primary" id="wSave">Save</button>
   </div>
+</div>
+
+<!-- Compare sheet -->
+<div class="sheet" id="compareSheet" hidden role="dialog" aria-labelledby="cmpTitle">
+  <h2 id="cmpTitle">Compare</h2>
+  <div class="cmp-controls">
+    <select id="cmpA" aria-label="Earlier date"></select>
+    <select id="cmpPose" aria-label="Pose"><option value="front">Front</option><option value="side">Side</option><option value="back">Back</option></select>
+    <select id="cmpB" aria-label="Later date"></select>
+  </div>
+  <div class="cmp">
+    <figure><img id="cmpImgA" alt="Earlier progress photo"><p class="muted small" hidden>No photo for this pose</p></figure>
+    <figure><img id="cmpImgB" alt="Later progress photo"><p class="muted small" hidden>No photo for this pose</p></figure>
+  </div>
+  <p class="cmp-stats" id="cmpStats"></p>
+  <button class="ghost" id="cmpClose">Close</button>
 </div>
 
 <!-- Meal sheet -->
