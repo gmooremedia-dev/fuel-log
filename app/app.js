@@ -247,10 +247,21 @@
     });
     change({ foods });
   }
+  const foodsInSlot = (slot, r = getDay(todayKey())) => (r.foods || []).filter(f => (f.slot || "Snack") === slot);
+  function addFood(rec) {   // adds alongside anything already logged for that meal
+    const field = SLOT_FIELD[rec.slot];
+    const existing = foodsInSlot(rec.slot);
+    rec.key = field ? (existing.length ? `${field}+${Date.now() % 1000000}` : field) : keyFor("Snack", rec.time);
+    const foods = (getDay(todayKey()).foods || []).concat(rec);
+    change({ ...(field ? { [field]: true } : {}), foods });
+  }
   function removeFood(key) {
-    const foods = (getDay(todayKey()).foods || []).filter(f => f.key !== key);
+    const all = getDay(todayKey()).foods || [];
+    const gone = all.find(f => f.key === key);
+    const foods = all.filter(f => f.key !== key);
     const patch = { foods };
-    if (FIELD_SLOT[key]) patch[key] = false;
+    const field = gone && SLOT_FIELD[gone.slot];
+    if (field && !foods.some(f => f.slot === gone.slot)) patch[field] = false;
     change(patch);
   }
 
@@ -386,6 +397,105 @@
     } catch (e) { showToast("Photo didn't save. Try again."); }
   }
 
+  // ---------- Barcode scanning ----------
+  let reader = null, scanning = false, scanSlot = null, product = null, prodGrams = 100, prodSlot = "Snack";
+  async function openScanner(slot) {
+    scanSlot = slot || null;
+    closeSheets();
+    $("scanner").hidden = false; $("scanCode").value = "";
+    $("scanMsg").textContent = "Point at the barcode";
+    for (let i = 0; i < 30 && !window.ZXing; i++) await new Promise(r => setTimeout(r, 100));
+    if (!window.ZXing) { $("scanMsg").textContent = "Scanner didn't load. Type the numbers instead."; return; }
+    try {
+      const hints = new Map();
+      const F = ZXing.BarcodeFormat;
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
+      reader = new ZXing.BrowserMultiFormatReader(hints);
+      scanning = true;
+      await reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } } }, $("scanVideo"), res => {
+        if (res && scanning) { scanning = false; if (navigator.vibrate) navigator.vibrate(40); stopScanner(); lookup(res.getText()); }
+      });
+    } catch (e) {
+      $("scanMsg").textContent = "Couldn't open the camera. Allow camera access in Settings, or type the numbers below.";
+    }
+  }
+  function stopScanner() {
+    scanning = false;
+    try { if (reader) reader.reset(); } catch (e) {}
+    reader = null; $("scanner").hidden = true;
+  }
+  function flagsFor(p) {
+    const f = new Set();
+    const al = (p.allergens_tags || []).join(" ") + " " + (p.traces_tags || []).join(" ");
+    const ing = String(p.ingredients_text_en || p.ingredients_text || "").toLowerCase();
+    if (/en:milk/.test(al) || /\b(milk|whey|lactose|cream|butter|cheese|yogurt|yoghurt)\b/.test(ing)) f.add("dairy");
+    if (/\bonion/.test(ing)) f.add("onion");
+    if (/\bgarlic/.test(ing)) f.add("garlic");
+    if (/\b(beans?|lentils?|chickpeas?)\b/.test(ing)) f.add("beans");
+    if (/(sucralose|aspartame|acesulfame|sorbitol|maltitol|xylitol|erythritol|stevia|sweetener)/.test(ing)) f.add("sweetener");
+    return [...f];
+  }
+  async function lookup(code) {
+    code = String(code).replace(/\D/g, "");
+    if (code.length < 8) { showToast("That barcode looks too short. Try again."); return; }
+    showToast("Looking it up…");
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_en,brands,nutriments,serving_size,serving_quantity,allergens_tags,traces_tags,ingredients_text,ingredients_text_en,image_front_small_url,quantity`);
+      const data = await res.json();
+      const p = data && data.status === 1 && data.product;
+      const n = p && p.nutriments || {};
+      const kcal100 = n["energy-kcal_100g"] ?? (n.energy_100g ? n.energy_100g / 4.184 : null);
+      if (!p || kcal100 == null) {
+        showToast("Not in the food database yet. Snap a photo of it or type it instead.", null, 5000);
+        openMealSheet(scanSlot ? SLOT_FIELD[scanSlot] : null, null);
+        return;
+      }
+      product = {
+        code, name: p.product_name_en || p.product_name || "Unnamed product", brand: (p.brands || "").split(",")[0].trim(),
+        img: p.image_front_small_url || "", kcal100: Number(kcal100), pro100: Number(n.proteins_100g || 0),
+        servingQ: Number(p.serving_quantity) || null, servingLabel: p.serving_size || "", pack: p.quantity || "", flags: flagsFor(p)
+      };
+      prodGrams = product.servingQ || 100;
+      prodSlot = scanSlot || slotForNow();
+      $("toast").hidden = true;
+      openProduct();
+    } catch (e) { showToast("Couldn't reach the food database. Check your signal."); }
+  }
+  function prodNumbers(g) { return { kcal: Math.round(product.kcal100 * g / 100), protein: Math.round(product.pro100 * g / 10) / 10 }; }
+  function openProduct() {
+    $("prodName").textContent = product.name;
+    $("prodBrand").textContent = [product.brand, product.pack].filter(Boolean).join(" · ");
+    $("prodImg").src = product.img || "";
+    $("prodFlags").hidden = !product.flags.length;
+    $("prodFlags").textContent = product.flags.length ? `Heads up: contains ${product.flags.join(", ")}` : "";
+    const box = $("prodAmounts"); box.textContent = "";
+    const amounts = [];
+    if (product.servingQ) amounts.push([product.servingQ, `1 serving${product.servingLabel ? " (" + product.servingLabel + ")" : ""}`], [product.servingQ * 2, "2 servings"]);
+    amounts.push([100, "100 g"]);
+    amounts.forEach(([g, label]) => {
+      const b = document.createElement("button"); b.className = "opt" + (Math.abs(g - prodGrams) < .01 ? " on" : "");
+      const v = prodNumbers(g);
+      b.innerHTML = "<span><b></b><small></small></span>";
+      b.querySelector("b").textContent = label;
+      b.querySelector("small").textContent = `${fmt(v.kcal)} kcal · ${v.protein}g protein`;
+      b.onclick = () => { prodGrams = g; openProduct(); };
+      box.appendChild(b);
+    });
+    $("prodGrams").value = Math.round(prodGrams);
+    const v = prodNumbers(prodGrams);
+    $("prodTotal").innerHTML = `${fmt(v.kcal)} kcal<small></small>`;
+    $("prodTotal").querySelector("small").textContent = `${v.protein}g protein · ${Math.round(prodGrams)} g`;
+    document.querySelectorAll("#prodSlot button").forEach(b => b.classList.toggle("on", b.dataset.slot === prodSlot));
+    openSheet("productSheet");
+  }
+  function logProduct() {
+    const v = prodNumbers(prodGrams);
+    addFood({ slot: prodSlot, time: nowTime(), source: "barcode", code: product.code, grams: Math.round(prodGrams),
+      name: product.name, calories: v.kcal, protein_g: Math.round(v.protein), flags: product.flags, items: [], note: "" });
+    closeSheets();
+    showToast(`${product.name}: ${fmt(v.kcal)} kcal added to ${prodSlot.toLowerCase()}.`);
+  }
+
   // ---------- Series helpers ----------
   function lastN(n) {
     const out = [];
@@ -424,8 +534,9 @@
     const wrap = $("meals"); wrap.textContent = "";
     const rows = [["b", "b"], ["l", LUNCH[now.getDay()]], ["d", DINNER[now.getDay()]]];
     rows.forEach(([field, mk]) => {
-      const m = MEALS[mk], rec = foodForField(field);
-      const busy = todaysPhotos.some(p => p.key === field && p.analysing) || (rec && rec.pendingAI);
+      const m = MEALS[mk], recs = foodsInSlot(m.slot, t);
+      const rec = recs.length ? { name: recs.map(x => x.name).join(", "), calories: recs.reduce((a, x) => a + (x.calories || 0), 0), protein_g: recs.reduce((a, x) => a + (x.protein_g || 0), 0) } : null;
+      const busy = todaysPhotos.some(p => p.slot === m.slot && p.analysing) || recs.some(x => x.pendingAI);
       const done = !!t[field];
       const btn = document.createElement("button");
       btn.className = "meal" + (done ? " done" : "") + (busy ? " busy" : "");
@@ -442,7 +553,7 @@
       wrap.appendChild(btn);
     });
     // snacks row
-    const snacks = (t.foods || []).filter(f => String(f.key).startsWith("snack"));
+    const snacks = foodsInSlot("Snack", t);
     const sk = snacks.reduce((a, f) => a + (f.calories || 0), 0);
     const sb = document.createElement("button");
     sb.className = "meal" + (snacks.length ? " done" : "");
@@ -627,7 +738,7 @@
   }
 
   // ---------- Sheets ----------
-  const SHEETS = ["logSheet", "mealSheet", "gutSheet", "moveSheet", "numSheet", "compareSheet", "settingsSheet"];
+  const SHEETS = ["logSheet", "mealSheet", "gutSheet", "moveSheet", "numSheet", "compareSheet", "settingsSheet", "productSheet"];
   function openSheet(id) { SHEETS.forEach(s => { $(s).hidden = s !== id; }); $("scrim").hidden = false; }
   function closeSheets() { SHEETS.forEach(s => { $(s).hidden = true; }); $("scrim").hidden = true; }
 
@@ -635,24 +746,32 @@
   function openMealSheet(field, plannedKey) {
     sheetField = field;
     const rec = field ? foodForField(field) : null;
-    $("mealTitle").textContent = field ? (rec ? FIELD_SLOT[field] : `What did you have for ${FIELD_SLOT[field].toLowerCase()}?`) : "Add a snack or extra";
-    const lg = $("mealLogged"); lg.textContent = ""; lg.hidden = !rec;
-    if (rec) {
-      const b = document.createElement("b"); b.textContent = rec.name;
+    $("mealTitle").textContent = field ? (rec ? FIELD_SLOT[field] : `What did you have for ${FIELD_SLOT[field].toLowerCase()}?`) : "Snacks & extras";
+    const slotName = field ? FIELD_SLOT[field] : "Snack";
+    const items = foodsInSlot(slotName);
+    const lg = $("mealLogged"); lg.textContent = ""; lg.hidden = !items.length;
+    items.forEach(it => {
+      const wrapI = document.createElement("div");
+      const row = document.createElement("div"); row.className = "logged-item";
+      const b = document.createElement("b"); b.textContent = it.name;
+      const x = document.createElement("button"); x.className = "x"; x.textContent = "Remove";
+      x.onclick = () => { removeFood(it.key); openMealSheet(field, plannedKey); };
+      row.append(b, x); wrapI.appendChild(row);
       const meta = document.createElement("div"); meta.className = "ln-meta";
-      meta.textContent = rec.calories ? `~${fmt(rec.calories)} kcal · ${rec.protein_g}g protein${rec.flags && rec.flags.length ? " · contains " + rec.flags.join(", ") : ""}` : "No estimate yet";
-      lg.append(b, meta);
-      if (rec.note) { const n = document.createElement("div"); n.className = "ln-note"; n.textContent = rec.note; lg.appendChild(n); }
-      if (rec.calories) {
-        const row = document.createElement("div"); row.className = "portion";
-        row.innerHTML = '<span class="muted small">Portion</span><div class="seg"><button data-p="0.5">½</button><button data-p="1">1×</button><button data-p="1.5">1½</button><button data-p="2">2×</button></div>';
-        row.querySelectorAll("button").forEach(btn => {
-          btn.classList.toggle("on", Number(btn.dataset.p) === (rec.portion || 1));
-          btn.onclick = () => { setPortion(rec.key, Number(btn.dataset.p)); openMealSheet(field, plannedKey); };
+      meta.textContent = it.pendingAI ? "Estimating…" : it.calories ? `~${fmt(it.calories)} kcal · ${it.protein_g}g protein${it.flags && it.flags.length ? " · contains " + it.flags.join(", ") : ""}` : "No estimate";
+      wrapI.appendChild(meta);
+      if (it.note) { const n = document.createElement("div"); n.className = "ln-note"; n.textContent = it.note; wrapI.appendChild(n); }
+      if (it.calories && it.source !== "barcode") {
+        const pr = document.createElement("div"); pr.className = "portion";
+        pr.innerHTML = '<span class="muted small">Portion</span><div class="seg"><button data-p="0.5">½</button><button data-p="1">1×</button><button data-p="1.5">1½</button><button data-p="2">2×</button></div>';
+        pr.querySelectorAll("button").forEach(btn => {
+          btn.classList.toggle("on", Number(btn.dataset.p) === (it.portion || 1));
+          btn.onclick = () => { setPortion(it.key, Number(btn.dataset.p)); openMealSheet(field, plannedKey); };
         });
-        lg.appendChild(row);
+        wrapI.appendChild(pr);
       }
-    }
+      lg.appendChild(wrapI);
+    });
     const box = $("mealOpts"); box.textContent = "";
     (field ? OPTIONS[field] : []).forEach(mk => {
       const m = MEALS[mk];
@@ -668,7 +787,7 @@
     box.hidden = !field;
     $("mealText").value = "";
     $("mealText").placeholder = field ? (rec ? "Change it: type what you had…" : "Something else…") : "e.g. banana and a protein bar";
-    $("mealNone").hidden = !rec;
+    $("mealNone").hidden = true;
     openSheet("mealSheet");
   }
 
@@ -747,6 +866,7 @@
     document.querySelectorAll("#logSheet [data-act]").forEach(b => b.onclick = () => {
       const a = b.dataset.act;
       if (a === "type") openMealSheet(null);
+      if (a === "scan") openScanner(null);
       if (a === "gut") openGut();
       if (a === "move") openSheet("moveSheet");
       if (a === "weight" || a === "waist") openNum(a);
@@ -758,6 +878,16 @@
       if (!text) { $("mealText").focus(); return; }
       const f = sheetField; closeSheets(); logText(f, text.slice(0, 120));
     });
+    $("mealScan").onclick = () => openScanner(sheetField ? FIELD_SLOT[sheetField] : "Snack");
+    $("scanClose").onclick = stopScanner;
+    $("scanManual").addEventListener("submit", e => { e.preventDefault(); const c = $("scanCode").value; if (c) { stopScanner(); lookup(c); } });
+    $("prodGrams").addEventListener("input", () => {
+      const g = parseFloat($("prodGrams").value);
+      if (g > 0 && g < 5000) { prodGrams = g; const v = prodNumbers(g); $("prodTotal").firstChild.textContent = `${fmt(v.kcal)} kcal`; $("prodTotal").querySelector("small").textContent = `${v.protein}g protein · ${Math.round(g)} g`; document.querySelectorAll("#prodAmounts .opt").forEach(o => o.classList.remove("on")); }
+    });
+    document.querySelectorAll("#prodSlot button").forEach(b => b.onclick = () => { prodSlot = b.dataset.slot; document.querySelectorAll("#prodSlot button").forEach(x => x.classList.toggle("on", x === b)); });
+    $("prodLog").onclick = logProduct;
+    $("prodRescan").onclick = () => openScanner(prodSlot);
     $("mealNone").onclick = () => {
       const rec = sheetField ? foodForField(sheetField) : null;
       closeSheets();
@@ -819,6 +949,7 @@
     else if (h === "weight" || h === "waist") openNum(h);
     else if (["b", "l", "d"].includes(h)) openMealSheet(h, h === "b" ? "b" : h === "l" ? LUNCH[today().getDay()] : DINNER[today().getDay()]);
     else if (h === "log") openSheet("logSheet");
+    else if (h === "scan") openScanner(null);
     if (h) history.replaceState(null, "", "/");
     setStatus("Syncing…");
     refresh();

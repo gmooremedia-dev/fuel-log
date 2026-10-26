@@ -194,6 +194,7 @@
   <div class="logmenu">
     <label class="lm"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>Snap food<input id="lmCamera" type="file" accept="image/*" capture="environment"></label>
     <label class="lm"><span class="lm-ic"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg></span>Upload photo<input id="lmGallery" type="file" accept="image/*"></label>
+    <button class="lm" data-act="scan"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 7V5h3M17 5h3v2M20 17v2h-3M7 19H4v-2"/><path d="M8 9v6M11 9v6M14 9v6M16.5 9v6"/></svg></span>Scan barcode</button>
     <button class="lm" data-act="type"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/></svg></span>Type food</button>
     <button class="lm" data-act="gut"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M12 21c-4.5-2.8-7-5.8-7-9.5A4 4 0 0 1 12 9a4 4 0 0 1 7 2.5c0 3.7-2.5 6.7-7 9.5z"/></svg></span>Gut check</button>
     <button class="lm" data-act="move"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M6 9v6M18 9v6M3 11v2M21 11v2M6 12h12"/></svg></span>Workout</button>
@@ -214,6 +215,7 @@
     <button class="btn primary" type="submit">Log</button>
   </form>
   <p class="muted small" style="margin:0">Type it how you'd say it, and I'll work out the calories.</p>
+  <button class="btn ghost" id="mealScan"><svg viewBox="0 0 24 24" width="20" height="20" style="fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round"><path d="M4 7V5h3M17 5h3v2M20 17v2h-3M7 19H4v-2"/><path d="M8 9v6M11 9v6M14 9v6M16.5 9v6"/></svg>Scan a barcode</button>
   <div class="two-btns">
     <label class="btn ghost">Take photo<input id="mealCam" type="file" accept="image/*" capture="environment"></label>
     <label class="btn ghost">Choose photo<input id="mealLib" type="file" accept="image/*"></label>
@@ -273,6 +275,42 @@
   <button class="btn ghost" data-close>Close</button>
 </div>
 
+<!-- Barcode scanner -->
+<div class="scanner" id="scanner" hidden role="dialog" aria-label="Scan a barcode">
+  <video id="scanVideo" playsinline muted></video>
+  <div class="scan-frame" aria-hidden="true"></div>
+  <div class="scan-top">
+    <button class="scan-close" id="scanClose" aria-label="Close scanner"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="scan-bottom">
+    <p id="scanMsg">Point at the barcode</p>
+    <form class="scan-manual" id="scanManual">
+      <input id="scanCode" inputmode="numeric" pattern="[0-9]*" placeholder="Or type the numbers" autocomplete="off">
+      <button class="btn primary" type="submit">Look up</button>
+    </form>
+  </div>
+</div>
+
+<!-- Product sheet -->
+<div class="sheet" id="productSheet" hidden role="dialog" aria-labelledby="prodName">
+  <div class="grab"></div>
+  <div class="prod">
+    <img id="prodImg" alt="">
+    <div><h2 id="prodName">Product</h2><p class="muted small" id="prodBrand" style="margin:2px 0 0"></p></div>
+  </div>
+  <p class="prod-flags" id="prodFlags" hidden></p>
+  <div class="opts" id="prodAmounts"></div>
+  <div class="set-row"><label for="prodGrams">Or amount (g / ml)</label><input id="prodGrams" type="number" inputmode="decimal" min="1" max="2000"></div>
+  <div class="prod-total" id="prodTotal"></div>
+  <div class="seg slot-seg" id="prodSlot">
+    <button data-slot="Breakfast">Breakfast</button><button data-slot="Lunch">Lunch</button><button data-slot="Dinner">Dinner</button><button data-slot="Snack">Snack</button>
+  </div>
+  <div class="two-btns">
+    <button class="btn ghost" id="prodRescan">Scan another</button>
+    <button class="btn primary" id="prodLog">Log it</button>
+  </div>
+</div>
+
 <!-- Settings -->
 <div class="sheet" id="settingsSheet" hidden role="dialog" aria-labelledby="setTitle">
   <div class="grab"></div>
@@ -288,6 +326,7 @@
 
 <script src="/config.js"></script>
 <script src="/msal-browser.min.js"></script>
+<script src="/zxing.min.js" defer></script>
 <script src="/app.js"></script>
 </body>
 </html>

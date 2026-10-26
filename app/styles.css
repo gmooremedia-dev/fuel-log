@@ -254,4 +254,28 @@ h2 { font-family: var(--display); font-weight: 700; font-size: 18px; margin: 0; 
 .cmp img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 14px; background: var(--sunk); }
 .cmp-stats { text-align: center; font-weight: 600; margin: 0; font-variant-numeric: tabular-nums; }
 
+/* ---------- Scanner ---------- */
+.scanner { position: fixed; inset: 0; z-index: 9; background: #000; }
+.scanner video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scan-frame { position: absolute; left: 50%; top: 42%; width: min(78vw, 340px); height: 150px; transform: translate(-50%, -50%); border-radius: 18px; box-shadow: 0 0 0 9999px rgba(0,0,0,.45); border: 2px solid rgba(255,255,255,.85); }
+.scan-top { position: absolute; top: 0; left: 0; right: 0; padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); display: flex; justify-content: flex-end; }
+.scan-close { width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,.5); display: grid; place-items: center; color: #fff; }
+.scan-close svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.scan-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px max(16px, env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 12px; color: #fff; text-align: center; }
+.scan-bottom p { margin: 0; font-weight: 600; font-size: 16px; }
+.scan-manual { display: flex; gap: 8px; }
+.scan-manual input { flex: 1; min-width: 0; padding: 14px; border-radius: 14px; border: 0; background: rgba(255,255,255,.92); color: #141c18; font-size: 16px; }
+.prod { display: flex; gap: 14px; align-items: center; }
+.prod img { width: 64px; height: 64px; object-fit: contain; border-radius: 12px; background: var(--sunk); flex: none; }
+.prod img[src=""], .prod img:not([src]) { visibility: hidden; }
+.prod-flags { margin: 0; font-size: 14px; font-weight: 600; color: var(--berry); background: var(--berry-soft); padding: 10px 12px; border-radius: 12px; }
+.prod-total { text-align: center; font-family: var(--display); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; }
+.prod-total small { display: block; font-family: var(--body); font-weight: 500; font-size: 13px; color: var(--muted); }
+.slot-seg { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); }
+.slot-seg button { padding: 10px 2px; }
+.btn svg { flex: none; }
+.logged-item { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.logged-item + .logged-item { border-top: 1px solid var(--line); padding-top: 10px; }
+.logged-item .x { color: var(--berry); font-size: 13px; font-weight: 600; padding: 4px; }
+
 @media (prefers-reduced-motion: reduce) { *, .sheet { transition: none !important; animation: none !important; } }
