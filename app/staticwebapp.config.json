@@ -5,7 +5,7 @@
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": [
-      "/icons/*",
+      "/icons/*", "/apple-touch-icon*.png",
       "*.{js,css,png,json,webmanifest}"
     ]
   },
