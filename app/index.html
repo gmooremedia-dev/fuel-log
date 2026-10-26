@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Fuel Log</title>
-<meta name="theme-color" content="#1f6b4f">
+<meta name="theme-color" content="#f2f4f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1411" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -13,7 +14,7 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="icon" href="/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -24,107 +25,158 @@
     <img src="/icons/icon-192.png" alt="" width="72" height="72">
     <h1>Fuel Log</h1>
     <p id="gateText">Sign in with your Shirestone account to start logging.</p>
-    <button id="signIn" class="primary big">Sign in</button>
+    <button id="signIn" class="btn primary big">Sign in</button>
   </div>
 </section>
 
-<main id="app" hidden>
-  <header class="top">
-    <div>
-      <div class="date" id="date"></div>
-      <h1 id="headline">Three ticks today</h1>
-    </div>
-    <div class="streak"><b id="streak">0</b><span>day streak</span></div>
-  </header>
+<div id="app" hidden>
 
-  <div class="nudge" id="nudge" hidden>Monday weigh-in. Tap the weight card below.</div>
-
-  <section>
-    <h2>Today's food</h2>
-    <div class="meals" id="meals"></div>
-    <div class="done-msg" id="doneMsg" hidden>Day done. Streak's safe.</div>
-    <ul class="extras" id="extras" hidden></ul>
-    <p class="day-total" id="dayTotal" hidden></p>
-    <button class="add-snack" id="addSnack">+ Add a snack or extra</button>
-  </section>
-
-  <section>
-    <div class="h2row"><h2>Today's photos</h2><span class="muted small" id="photoCount"></span></div>
-    <div class="photos" id="photos"><p class="muted small" id="noPhotos">No photos yet. Tap Snap when you eat.</p></div>
-  </section>
-
-  <section>
-    <h2>Gut this morning</h2>
-    <div class="chips3" id="gut">
-      <button class="chip" data-v="good" id="gut-good">Good</button>
-      <button class="chip" data-v="meh" id="gut-meh">Meh</button>
-      <button class="chip" data-v="rough" id="gut-rough">Rough</button>
-    </div>
-  </section>
-
-  <section>
-    <h2>Moved today</h2>
-    <button class="chip wide" id="move" aria-pressed="false">20 min workout done</button>
-  </section>
-
-  <section>
-    <h2>Weight</h2>
-    <button class="weight-card" id="weightCard">
+  <!-- ===== TODAY ===== -->
+  <main class="view" id="view-today">
+    <header class="top">
       <div>
-        <div class="w-big" id="wLast">Add weight</div>
-        <div class="muted small" id="wTrend">Tap to log</div>
+        <div class="eyebrow" id="date"></div>
+        <h1 id="headline">Today</h1>
       </div>
-      <svg class="spark" id="spark" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <button class="icon-btn" id="openSettings" aria-label="Targets and settings">
+        <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
+    </header>
+
+    <section class="hero" aria-label="Today's calories">
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-track" cx="60" cy="60" r="52"/>
+          <circle class="ring-fill" id="ringFill" cx="60" cy="60" r="52"/>
+        </svg>
+        <div class="ring-label">
+          <b id="kcalLeft">1,700</b>
+          <span id="kcalLeftLabel">kcal left</span>
+        </div>
+      </div>
+      <div class="hero-side">
+        <div class="stat"><span class="stat-k">Eaten</span><span class="stat-v" id="kcalEaten">0</span></div>
+        <div class="stat"><span class="stat-k">Target</span><span class="stat-v" id="kcalTarget">1,700</span></div>
+        <div class="pbar">
+          <div class="pbar-top"><span class="stat-k">Protein</span><span class="pbar-v" id="proteinText">0 / 150 g</span></div>
+          <div class="pbar-track"><div class="pbar-fill" id="proteinFill"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Meals</h2><span class="muted small" id="streakText"></span></div>
+      <div class="meals" id="meals"></div>
+    </section>
+
+    <section id="photoSection" hidden>
+      <div class="sec-head"><h2>Photos</h2><span class="muted small" id="photoCount"></span></div>
+      <div class="photos" id="photos"></div>
+    </section>
+
+    <section class="quiet" aria-label="Other check-ins">
+      <button class="pill" id="pillGut"><span class="dot" id="gutDot"></span><span id="gutText">Gut check</span></button>
+      <button class="pill" id="pillMove"><span class="dot" id="moveDot"></span><span id="moveText">Workout</span></button>
+      <button class="pill" id="pillWeight"><span class="dot" id="weightDot"></span><span id="weightText">Weight</span></button>
+    </section>
+
+    <p class="status" id="status">Loading…</p>
+  </main>
+
+  <!-- ===== TRENDS ===== -->
+  <main class="view" id="view-trends" hidden>
+    <header class="top">
+      <div><div class="eyebrow">Your patterns</div><h1>Trends</h1></div>
+      <div class="seg" role="tablist" aria-label="Range" id="rangeSeg">
+        <button role="tab" data-range="7" aria-selected="true">7 days</button>
+        <button role="tab" data-range="30" aria-selected="false">30 days</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="card-head"><h2>Calories</h2><span class="kpi" id="calAvg">–</span></div>
+      <svg class="chart" id="chartCal" viewBox="0 0 320 140" role="img" aria-label="Daily calories against target"></svg>
+      <p class="muted small note" id="calNote"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Protein</h2><span class="kpi" id="proAvg">–</span></div>
+      <svg class="chart" id="chartPro" viewBox="0 0 320 120" role="img" aria-label="Daily protein against target"></svg>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Weight</h2><span class="kpi" id="wDelta">–</span></div>
+      <svg class="chart" id="chartWeight" viewBox="0 0 320 120" role="img" aria-label="Weight trend"></svg>
+      <p class="muted small note" id="wNote"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Gut</h2><span class="kpi" id="gutKpi">–</span></div>
+      <div class="gutstrip" id="gutStrip"></div>
+      <p class="insight" id="gutInsight"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Consistency</h2><span class="kpi" id="consKpi">–</span></div>
+      <div class="cons" id="consStrip"></div>
+      <p class="muted small note">Each square is a day: full means all three meals logged.</p>
+    </section>
+  </main>
+
+  <!-- ===== BODY ===== -->
+  <main class="view" id="view-body" hidden>
+    <header class="top">
+      <div><div class="eyebrow">Weekly check-in</div><h1>Body</h1></div>
+      <button class="btn ghost sm" id="revealBtn">Show photos</button>
+    </header>
+
+    <section class="card">
+      <div class="pthumbs" id="progressThumbs"></div>
+      <p class="muted small note" id="progressHint"></p>
+      <div class="pose-row">
+        <label class="btn ghost">Front<input id="pp-front" type="file" accept="image/*"></label>
+        <label class="btn ghost">Side<input id="pp-side" type="file" accept="image/*"></label>
+        <label class="btn ghost">Back<input id="pp-back" type="file" accept="image/*"></label>
+      </div>
+      <button class="btn ghost wide" id="compareBtn" disabled>Compare two dates</button>
+    </section>
+
+    <section class="two-metrics">
+      <button class="metric" id="bodyWeight"><span class="stat-k">Weight</span><b id="bodyWeightV">–</b><span class="muted small" id="bodyWeightS">Tap to log</span></button>
+      <button class="metric" id="bodyWaist"><span class="stat-k">Waist</span><b id="bodyWaistV">–</b><span class="muted small" id="bodyWaistS">Tap to log</span></button>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Waist</h2><span class="kpi" id="waistDelta">–</span></div>
+      <svg class="chart" id="chartWaist" viewBox="0 0 320 110" role="img" aria-label="Waist trend"></svg>
+      <p class="muted small note">Measure at your belly button, relaxed, first thing in the morning.</p>
+    </section>
+  </main>
+
+  <!-- Tab bar -->
+  <nav class="tabbar" aria-label="Sections">
+    <button class="tab" data-view="today" aria-current="page">
+      <svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z"/></svg><span>Today</span>
     </button>
-  </section>
-
-  <section>
-    <div class="h2row"><h2>Body progress</h2><button class="link small-link" id="revealBtn">Show</button></div>
-    <div class="pthumbs" id="progressThumbs"></div>
-    <p class="muted small" id="progressHint"></p>
-    <div class="pose-row">
-      <label class="ghost">Front<input id="pp-front" type="file" accept="image/*"></label>
-      <label class="ghost">Side<input id="pp-side" type="file" accept="image/*"></label>
-      <label class="ghost">Back<input id="pp-back" type="file" accept="image/*"></label>
-    </div>
-    <div class="waist">
-      <div><div class="muted small">Waist today, at belly button</div><div class="w-mid"><span id="waistValue">90.0</span> cm</div></div>
-      <div class="waist-steps" id="waistSteps"><button data-step="-0.5">−0.5</button><button data-step="0.5">+0.5</button></div>
-    </div>
-    <button class="ghost wide-btn" id="compareBtn" disabled>Compare photos</button>
-  </section>
-
-  <section>
-    <h2>Last 14 days</h2>
-    <div class="strip" id="strip"></div>
-    <div class="legend">
-      <span><i class="lg full"></i>All 3 meals</span>
-      <span><i class="lg part"></i>Some</span>
-      <span><i class="lg rough"></i>Rough gut</span>
-    </div>
-  </section>
-
-  <p class="status" id="status">Loading…</p>
-  <div class="fab-space"></div>
-</main>
-
-<!-- Snap / upload buttons -->
-<div class="fabs" id="fab" hidden>
-  <label class="fab">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-    <span>Snap food</span>
-    <input id="camera" type="file" accept="image/*" capture="environment">
-  </label>
-  <label class="fab fab-alt" aria-label="Upload a photo">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg>
-    <span>Upload</span>
-    <input id="gallery" type="file" accept="image/*">
-  </label>
+    <button class="tab" data-view="trends">
+      <svg viewBox="0 0 24 24"><path d="M4 19h16M7 16v-5M12 16V7M17 16v-8"/></svg><span>Trends</span>
+    </button>
+    <button class="plus" id="plusBtn" aria-label="Log something">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button class="tab" data-view="body">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="2.5"/><path d="M7 10.5h10M12 10.5V15m0 0l-3 5m3-5l3 5"/></svg><span>Body</span>
+    </button>
+    <label class="tab" aria-label="Snap food">
+      <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Snap</span>
+      <input id="camera" type="file" accept="image/*" capture="environment">
+    </label>
+  </nav>
 </div>
 
-<!-- Toast after a photo -->
+<!-- Toast -->
 <div class="toast" id="toast" hidden>
-  <div id="toastText">Saved</div>
+  <div id="toastText"></div>
   <div class="toast-slots" id="toastSlots" hidden>
     <button data-slot="Breakfast">Breakfast</button>
     <button data-slot="Lunch">Lunch</button>
@@ -133,26 +185,80 @@
   </div>
 </div>
 
-<!-- Weight sheet -->
 <div class="scrim" id="scrim" hidden></div>
-<div class="sheet" id="sheet" hidden role="dialog" aria-labelledby="sheetTitle">
-  <h2 id="sheetTitle">Log weight</h2>
-  <div class="w-entry"><span id="wValue">84.0</span><small>kg</small></div>
-  <div class="steppers">
-    <button data-step="-1">−1</button>
-    <button data-step="-0.1">−0.1</button>
-    <button data-step="0.1">+0.1</button>
-    <button data-step="1">+1</button>
+
+<!-- Log menu -->
+<div class="sheet" id="logSheet" hidden role="dialog" aria-labelledby="logTitle">
+  <div class="grab"></div>
+  <h2 id="logTitle">Log something</h2>
+  <div class="logmenu">
+    <label class="lm"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>Snap food<input id="lmCamera" type="file" accept="image/*" capture="environment"></label>
+    <label class="lm"><span class="lm-ic"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg></span>Upload photo<input id="lmGallery" type="file" accept="image/*"></label>
+    <button class="lm" data-act="type"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/></svg></span>Type food</button>
+    <button class="lm" data-act="gut"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M12 21c-4.5-2.8-7-5.8-7-9.5A4 4 0 0 1 12 9a4 4 0 0 1 7 2.5c0 3.7-2.5 6.7-7 9.5z"/></svg></span>Gut check</button>
+    <button class="lm" data-act="move"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M6 9v6M18 9v6M3 11v2M21 11v2M6 12h12"/></svg></span>Workout</button>
+    <button class="lm" data-act="weight"><span class="lm-ic"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 9.5l3 3.5 3-3.5"/></svg></span>Weight</button>
+    <button class="lm" data-act="waist"><span class="lm-ic"><svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M7 9v6M11 10v4M15 9v6"/></svg></span>Waist</button>
+    <button class="lm" data-act="body"><span class="lm-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="2.5"/><path d="M7 10.5h10M12 10.5V15m0 0l-3 5m3-5l3 5"/></svg></span>Progress photo</button>
   </div>
-  <p class="muted small">Same time each week, first thing, after the loo.</p>
-  <div class="sheet-actions">
-    <button class="ghost" id="wCancel">Cancel</button>
-    <button class="primary" id="wSave">Save</button>
+</div>
+
+<!-- Meal sheet -->
+<div class="sheet" id="mealSheet" hidden role="dialog" aria-labelledby="mealTitle">
+  <div class="grab"></div>
+  <h2 id="mealTitle">What did you have?</h2>
+  <div class="logged" id="mealLogged" hidden></div>
+  <div class="opts" id="mealOpts"></div>
+  <form class="other" id="mealForm">
+    <input id="mealText" type="text" autocomplete="off" enterkeyhint="done" placeholder="Something else…">
+    <button class="btn primary" type="submit">Log</button>
+  </form>
+  <p class="muted small" style="margin:0">Type it how you'd say it, and I'll work out the calories.</p>
+  <div class="two-btns">
+    <label class="btn ghost">Take photo<input id="mealCam" type="file" accept="image/*" capture="environment"></label>
+    <label class="btn ghost">Choose photo<input id="mealLib" type="file" accept="image/*"></label>
+  </div>
+  <button class="btn link danger" id="mealNone">Remove this meal</button>
+</div>
+
+<!-- Gut sheet -->
+<div class="sheet" id="gutSheet" hidden role="dialog" aria-labelledby="gutTitle">
+  <div class="grab"></div>
+  <h2 id="gutTitle">How's your gut this morning?</h2>
+  <div class="chips3">
+    <button class="chip" data-v="good">Good</button>
+    <button class="chip" data-v="meh">Meh</button>
+    <button class="chip" data-v="rough">Rough</button>
+  </div>
+</div>
+
+<!-- Workout sheet -->
+<div class="sheet" id="moveSheet" hidden role="dialog" aria-labelledby="moveTitle">
+  <div class="grab"></div>
+  <h2 id="moveTitle">20-minute workout</h2>
+  <p class="muted small" style="margin:0">Press-ups, squats, lunges, band rows, plank. Three rounds.</p>
+  <div class="two-btns">
+    <button class="btn ghost" id="moveUndo">Not today</button>
+    <button class="btn primary" id="moveDone">Done it</button>
+  </div>
+</div>
+
+<!-- Number sheet (weight / waist) -->
+<div class="sheet" id="numSheet" hidden role="dialog" aria-labelledby="numTitle">
+  <div class="grab"></div>
+  <h2 id="numTitle">Log weight</h2>
+  <div class="w-entry"><span id="numValue">84.0</span><small id="numUnit">kg</small></div>
+  <div class="steppers" id="numSteps"></div>
+  <p class="muted small center" id="numHint"></p>
+  <div class="two-btns">
+    <button class="btn ghost" data-close>Cancel</button>
+    <button class="btn primary" id="numSave">Save</button>
   </div>
 </div>
 
 <!-- Compare sheet -->
 <div class="sheet" id="compareSheet" hidden role="dialog" aria-labelledby="cmpTitle">
+  <div class="grab"></div>
   <h2 id="cmpTitle">Compare</h2>
   <div class="cmp-controls">
     <select id="cmpA" aria-label="Earlier date"></select>
@@ -164,22 +270,20 @@
     <figure><img id="cmpImgB" alt="Later progress photo"><p class="muted small" hidden>No photo for this pose</p></figure>
   </div>
   <p class="cmp-stats" id="cmpStats"></p>
-  <button class="ghost" id="cmpClose">Close</button>
+  <button class="btn ghost" data-close>Close</button>
 </div>
 
-<!-- Meal sheet -->
-<div class="sheet" id="mealSheet" hidden role="dialog" aria-labelledby="mealTitle">
-  <h2 id="mealTitle">What did you have?</h2>
-  <div class="opts" id="mealOpts"></div>
-  <form class="other" id="mealForm">
-    <input id="mealText" type="text" autocomplete="off" enterkeyhint="done" placeholder="Something else…">
-    <button class="primary" id="mealTextGo" type="submit">Log</button>
-  </form>
-  <div class="photo-row">
-    <label class="ghost">Take photo<input id="mealCam" type="file" accept="image/*" capture="environment"></label>
-    <label class="ghost">Choose photo<input id="mealLib" type="file" accept="image/*"></label>
+<!-- Settings -->
+<div class="sheet" id="settingsSheet" hidden role="dialog" aria-labelledby="setTitle">
+  <div class="grab"></div>
+  <h2 id="setTitle">Targets</h2>
+  <div class="set-row"><label for="setKcal">Daily calories</label><input id="setKcal" type="number" inputmode="numeric" min="1000" max="4000" step="50"></div>
+  <div class="set-row"><label for="setPro">Daily protein (g)</label><input id="setPro" type="number" inputmode="numeric" min="50" max="300" step="5"></div>
+  <p class="muted small" style="margin:0" id="whoami"></p>
+  <div class="two-btns">
+    <button class="btn ghost" id="signOut">Sign out</button>
+    <button class="btn primary" id="setSave">Save</button>
   </div>
-  <button class="link" id="mealNone">Didn't have it</button>
 </div>
 
 <script src="/config.js"></script>
